@@ -11,18 +11,12 @@ class WorkflowData:
     actions: Dict[str, dict]
     accounts: List[str]
 
-
-
 class UIComponent(ctk.CTkFrame):
-    """Base class for reusable UI components."""
     def __init__(self, parent, padding: int = 16):
         super().__init__(parent)
         self.padding = padding
 
-
-
 class ActionConfig(UIComponent):
-    """Manages action selection and inputs."""
     def __init__(self, parent, log: Callable[[str], None], padding: int = 16):
         super().__init__(parent, padding)
         self.log = log
@@ -87,11 +81,7 @@ class ActionConfig(UIComponent):
         for frame in self.action_inputs.values():
             frame.pack_forget()
 
-
-
-
 class AccountSelector(UIComponent):
-    """Manages account selection."""
     def __init__(self, parent, accounts: Dict[str, dict], log: Callable[[str], None], padding: int = 16):
         super().__init__(parent, padding)
         self.accounts = accounts
@@ -103,8 +93,8 @@ class AccountSelector(UIComponent):
         listbox_frame = ctk.CTkFrame(self)
         listbox_frame.pack(fill="both", expand=True)
         self.listbox = tk.Listbox(listbox_frame, height=10, width=30, selectmode=tk.MULTIPLE, font=("Segoe UI", 12))
-        self.scrollbar = tk.Scrollbar(listbox_frame, orient="vertical", command=self.listbox.yview)  # Store scrollbar
-        self.listbox.config(yscrollcommand=self.scrollbar.set)  # Bind to instance's set method
+        self.scrollbar = tk.Scrollbar(listbox_frame, orient="vertical", command=self.listbox.yview)
+        self.listbox.config(yscrollcommand=self.scrollbar.set)
         self.listbox.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="left", fill="y")
 
@@ -137,11 +127,7 @@ class AccountSelector(UIComponent):
         except ValueError:
             messagebox.showwarning("Input Error", "Invalid range format (e.g., 001-005).")
 
-
-
-
 class WorkflowSaver(UIComponent):
-    """Handles workflow saving."""
     def __init__(self, parent, save_command: Callable[[str], None], padding: int = 16):
         super().__init__(parent, padding)
         self.save_command = save_command
@@ -157,12 +143,7 @@ class WorkflowSaver(UIComponent):
         else:
             messagebox.showwarning("Input Error", "Please provide a workflow name.")
 
-
-
-
-
 class WorkflowList(ctk.CTkScrollableFrame):
-    """Manages workflow display and selection."""
     def __init__(self, parent, workflows: Dict[str, WorkflowData], log: Callable[[str], None], padding: int = 16):
         self.min_height, self.max_height, self.row_height = 50, 150, 35
         super().__init__(parent, height=self.min_height)
@@ -217,11 +198,7 @@ class WorkflowList(ctk.CTkScrollableFrame):
             w["status"].configure(text="Idle")
             w["progress"].set(0)
 
-
-
-
 class AutomationRunner:
-    """Handles workflow execution (sync now, async-ready)."""
     def __init__(self, workflows: Dict[str, WorkflowData], log: Callable[[str], None], workflow_list: WorkflowList):
         self.workflows = workflows
         self.log = log
@@ -271,12 +248,7 @@ class AutomationRunner:
                 time.sleep(0.1)
         self.workflow_list.update_status(name, "Completed")
 
-
-
-
-
 class AutomationSection(ctk.CTkFrame):
-    """Main automation panel."""
     def __init__(self, parent, accounts: Dict[str, dict], workflows: Dict[str, WorkflowData], log: Callable[[str], None]):
         super().__init__(parent)
         self.accounts = accounts

@@ -2,6 +2,8 @@ import customtkinter as ctk
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import datetime
+import asyncio
+from playwright_manager import playwright_mgr
 
 class Colors:
     PRIMARY = "#2D81FF"
@@ -11,25 +13,19 @@ class Colors:
     TEXT = "#334155"
     ACCENT = "#6366F1"
 
-
-
-
 class AccountsSection(ctk.CTkFrame):
     def __init__(self, parent, accounts, log_func, refresh_callback):
         super().__init__(parent)
-        # Use a dict for accounts: {id: {email, password, activity, status, last_activity}}
         self.accounts = accounts if accounts is not None else {}
         self.log = log_func
         self.refresh_callback = refresh_callback
         self.padding = 16
         self.colors = Colors()
-        self.next_id = 1  # For auto-incrementing IDs
+        self.next_id = 1
 
-        # Header
         header = ctk.CTkLabel(self, text="Account Management", font=("Segoe UI", 16, "bold"))
         header.pack(pady=(self.padding, 0), padx=self.padding, anchor="w")
 
-        # Add account frame
         add_frame = ctk.CTkFrame(self)
         add_frame.pack(pady=self.padding, padx=self.padding, fill="x")
 
@@ -42,11 +38,9 @@ class AccountsSection(ctk.CTkFrame):
         add_btn = ctk.CTkButton(add_frame, text="Add", command=self.add_account)
         add_btn.pack(side="left")
 
-        # Import button
         import_btn = ctk.CTkButton(self, text="Import from .txt", command=self.import_accounts)
         import_btn.pack(pady=self.padding // 2, padx=self.padding)
 
-        # Treeview for accounts
         self.accounts_tree = ttk.Treeview(
             self,
             columns=("ID", "Email", "Password", "Activity", "Status", "Last activity"),
@@ -56,7 +50,6 @@ class AccountsSection(ctk.CTkFrame):
         )
         self.accounts_tree.pack(pady=self.padding, padx=self.padding, fill="both", expand=True)
 
-        # Configure headings and columns
         self.accounts_tree.heading("ID", text="ID")
         self.accounts_tree.heading("Email", text="Email")
         self.accounts_tree.heading("Password", text="Password")
@@ -71,12 +64,10 @@ class AccountsSection(ctk.CTkFrame):
         self.accounts_tree.column("Status", width=80)
         self.accounts_tree.column("Last activity", width=120)
 
-        # Scrollbar
         scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.accounts_tree.yview)
         scrollbar.pack(side="right", fill="y")
         self.accounts_tree.configure(yscrollcommand=scrollbar.set)
 
-        # Edit and Delete buttons
         button_frame = ctk.CTkFrame(self)
         button_frame.pack(pady=self.padding // 2, padx=self.padding, fill="x")
 
@@ -84,14 +75,13 @@ class AccountsSection(ctk.CTkFrame):
         edit_btn.pack(side="left", padx=(0, self.padding // 2))
 
         delete_btn = ctk.CTkButton(button_frame, text="Delete", command=self.delete_account, fg_color=self.colors.SECONDARY, hover_color=self.colors.ACCENT)
-        delete_btn.pack(side="left")
+        delete_btn.pack(side="left", padx=(0, self.padding // 2))
+
+        test_btn = ctk.CTkButton(button_frame, text="Test", command=self.test_account, fg_color=self.colors.ACCENT, hover_color=self.colors.PRIMARY)
+        test_btn.pack(side="left")
 
         self.log("AccountsSection initialized")
-        # Populate Treeview if accounts dict is pre-filled
         self.refresh_treeview()
-
-
-
 
     def add_account(self, email=None, password=None):
         email = email or self.email_entry.get()
@@ -106,11 +96,9 @@ class AccountsSection(ctk.CTkFrame):
             return
 
         try:
-            # Generate 3-digit ID
             account_id = f"{self.next_id:03d}"
             self.next_id += 1
 
-            # Default values for new accounts
             account_data = {
                 "id": account_id,
                 "email": email,
@@ -121,7 +109,6 @@ class AccountsSection(ctk.CTkFrame):
             }
             self.accounts[account_id] = account_data
 
-            # Insert into Treeview
             self.accounts_tree.insert("", tk.END, iid=account_id, values=(
                 account_id, email, password, "Inactive", "Logged Out", ""
             ))
@@ -135,9 +122,6 @@ class AccountsSection(ctk.CTkFrame):
             messagebox.showerror("Error", f"Failed to add account: {str(e)}")
             self.log(f"Error adding account: {str(e)}")
 
-
-
-
     def import_accounts(self):
         file_path = filedialog.askopenfilename(filetypes=[("Text files", "*.txt")])
         if file_path:
@@ -149,9 +133,6 @@ class AccountsSection(ctk.CTkFrame):
                     except ValueError:
                         self.log(f"Skipping invalid line in file: {line.strip()}")
 
-
-
-
     def edit_account(self):
         selected = self.accounts_tree.selection()
         if not selected:
@@ -162,7 +143,6 @@ class AccountsSection(ctk.CTkFrame):
         account = self.accounts[account_id]
         old_email = account["email"]
 
-        # Create edit window
         edit_win = ctk.CTkToplevel(self)
         edit_win.title("Edit Account")
         edit_win.geometry("300x200")
@@ -189,13 +169,11 @@ class AccountsSection(ctk.CTkFrame):
                 messagebox.showerror("Duplicate Error", f"Account '{new_email}' already exists.")
                 return
 
-            # Update account data
             self.accounts[account_id].update({
                 "email": new_email,
                 "password": new_password
             })
 
-            # Update Treeview
             self.accounts_tree.item(account_id, values=(
                 account_id, new_email, new_password,
                 self.accounts[account_id]["activity"],
@@ -208,9 +186,6 @@ class AccountsSection(ctk.CTkFrame):
 
         save_btn = ctk.CTkButton(edit_win, text="Save", command=save_changes)
         save_btn.grid(row=2, column=0, columnspan=2, pady=10)
-
-
-
 
     def delete_account(self):
         selected = self.accounts_tree.selection()
@@ -227,14 +202,7 @@ class AccountsSection(ctk.CTkFrame):
             self.log(f"Deleted account: {email} (ID: {account_id}, Total: {len(self.accounts)})")
             self.refresh_callback()
 
-
-
-
     def update_account_status(self, updates):
-        """
-        Update account statuses from external data (e.g., backend or AutomationSection).
-        Expected format: {id: {"activity": str, "status": str, "last_activity": str}, ...}
-        """
         for account_id, update_data in updates.items():
             if account_id in self.accounts:
                 self.accounts[account_id].update({
@@ -242,7 +210,6 @@ class AccountsSection(ctk.CTkFrame):
                     "status": update_data.get("status", self.accounts[account_id]["status"]),
                     "last_activity": update_data.get("last_activity", self.accounts[account_id]["last_activity"])
                 })
-                # Update Treeview row
                 self.accounts_tree.item(account_id, values=(
                     account_id,
                     self.accounts[account_id]["email"],
@@ -253,11 +220,7 @@ class AccountsSection(ctk.CTkFrame):
                 ))
                 self.log(f"Updated status for account ID {account_id}: {self.accounts[account_id]['status']}")
 
-
-
-
     def refresh_treeview(self):
-        """Refresh Treeview from self.accounts"""
         for item in self.accounts_tree.get_children():
             self.accounts_tree.delete(item)
         for account_id, account in self.accounts.items():
@@ -265,3 +228,20 @@ class AccountsSection(ctk.CTkFrame):
                 account_id, account["email"], account["password"],
                 account["activity"], account["status"], account["last_activity"]
             ))
+
+    def test_account(self):
+        selected = self.accounts_tree.selection()
+        if not selected:
+            messagebox.showwarning("Warning", "Please select an account to test")
+            return
+
+        account_id = selected[0]
+        email = self.accounts[account_id]["email"]
+        password = self.accounts[account_id]["password"]
+        self.log(f"Testing account: {email}")
+
+        success = asyncio.run(playwright_mgr.test_browser(email, password, self.log))
+        if success:
+            self.accounts[account_id]["last_activity"] = datetime.datetime.now().strftime("%Y-%m-d %H:%M:%S")
+            self.accounts[account_id]["status"] = "Tested"
+            self.refresh_treeview()

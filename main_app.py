@@ -4,6 +4,7 @@ from tkinter import filedialog, messagebox, ttk
 import psutil
 from automation_section_manager import AutomationSection
 from account_section_manager import AccountsSection
+from settings_section import SettingsSection
 import datetime
 
 ctk.set_appearance_mode("Light")
@@ -17,8 +18,6 @@ class Colors:
     TEXT = "#334155"
     ACCENT = "#6366F1"
 
-
-
 class SocialMediaAutomationApp(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -29,7 +28,6 @@ class SocialMediaAutomationApp(ctk.CTk):
         self.colors = Colors()
         self.padding = 16
         self.corner_radius = 8
-        # Use a dictionary for accounts instead of a list
         self.accounts = {}
         self.workflows = {}
 
@@ -57,9 +55,6 @@ class SocialMediaAutomationApp(ctk.CTk):
 
     def _refresh_automation_accounts(self):
         self.sections["automation"].refresh_accounts()
-
-
-
 
 class Sidebar(ctk.CTkFrame):
     def __init__(self, parent, show_section_callback):
@@ -93,9 +88,6 @@ class Sidebar(ctk.CTkFrame):
         parent_frame = self.master.content_frame
         parent_frame.configure(fg_color=self.colors.BG_DARK if mode == "Dark" else self.colors.BG_LIGHT)
 
-
-
-
 class MonitoringSection(ctk.CTkFrame):
     def __init__(self, parent):
         super().__init__(parent)
@@ -122,23 +114,6 @@ class MonitoringSection(ctk.CTkFrame):
         memory = psutil.virtual_memory().percent
         self.resource_label.configure(text=f"CPU: {cpu}% | Memory: {memory}%")
         self.after(1000, self.update_resources)
-
-
-
-
-
-class SettingsSection(ctk.CTkFrame):
-    def __init__(self, parent, log_func):
-        super().__init__(parent)
-        self.log = log_func
-        self.padding = 16
-
-        header = ctk.CTkLabel(self, text="Settings", font=("Segoe UI", 16, "bold"))
-        header.pack(pady=(self.padding, 0), padx=self.padding, anchor="w")
-
-        ctk.CTkLabel(self, text="Scraping Configuration (TBD)").pack(pady=self.padding, padx=self.padding)
-        self.content_entry = ctk.CTkEntry(self, placeholder_text="Custom Message", width=300)
-        self.content_entry.pack(pady=self.padding, padx=self.padding)
 
 if __name__ == "__main__":
     app = SocialMediaAutomationApp()
