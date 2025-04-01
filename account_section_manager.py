@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import datetime
 import asyncio
+import threading
 from playwright_manager import playwright_mgr
 
 class Colors:
@@ -240,8 +241,15 @@ class AccountsSection(ctk.CTkFrame):
         password = self.accounts[account_id]["password"]
         self.log(f"Testing account: {email}")
 
-        success = asyncio.run(playwright_mgr.test_browser(email, password, self.log))
-        if success:
-            self.accounts[account_id]["last_activity"] = datetime.datetime.now().strftime("%Y-%m-d %H:%M:%S")
-            self.accounts[account_id]["status"] = "Tested"
-            self.refresh_treeview()
+        async def run_test():
+            success = await playwright_mgr.test_browser(email, password, self.log)
+            if success:
+                self.accounts[account_id]["last_activity"] = datetime.datetime.now().strftime("%Y-%m-d %H:%M:%S")
+                self.accounts[account_id]["status"] = "Tested"
+                self.after(0, self.refresh_treeview)
+
+        def thread_target():
+            asyncio.run(run_test())
+
+        test_thread = threading.Thread(target=thread_target)
+        test_thread.start()
