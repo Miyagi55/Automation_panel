@@ -13,3 +13,8 @@ wheels/
 *test
 
 *txt
+
+## uv lock
+uv.lock
+
+.mypy_cache
