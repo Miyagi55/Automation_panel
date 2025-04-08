@@ -7,8 +7,13 @@ from account_section_manager import AccountsSection
 from settings_section import SettingsSection
 import datetime
 
+
+
 ctk.set_appearance_mode("Light")
 ctk.set_default_color_theme("blue")
+
+
+
 
 class Colors:
     PRIMARY = "#2D81FF"
@@ -17,6 +22,10 @@ class Colors:
     BG_DARK = "#1E293B"
     TEXT = "#334155"
     ACCENT = "#6366F1"
+
+
+
+
 
 class SocialMediaAutomationApp(ctk.CTk):
     def __init__(self):
@@ -56,6 +65,10 @@ class SocialMediaAutomationApp(ctk.CTk):
     def _refresh_automation_accounts(self):
         self.sections["automation"].refresh_accounts()
 
+
+
+
+
 class Sidebar(ctk.CTkFrame):
     def __init__(self, parent, show_section_callback):
         super().__init__(parent, width=250, corner_radius=0)
@@ -87,6 +100,10 @@ class Sidebar(ctk.CTkFrame):
         ctk.set_appearance_mode(mode)
         parent_frame = self.master.content_frame
         parent_frame.configure(fg_color=self.colors.BG_DARK if mode == "Dark" else self.colors.BG_LIGHT)
+
+
+
+
 
 class MonitoringSection(ctk.CTkFrame):
     def __init__(self, parent):

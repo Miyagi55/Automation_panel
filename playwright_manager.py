@@ -1,10 +1,10 @@
 import os
+import re
 import subprocess
 import time
 import asyncio
 from tkinter import messagebox
-from playwright.async_api import async_playwright
-from playwright_stealth import stealth_async
+from patchright.async_api import async_playwright
 
 
 
@@ -147,21 +147,44 @@ class PlaywrightManager:
         return chromium_path
 
 
-
+##---------------------------------!!! BROWSER ENGINE  !!-----------------------------------------------------#
     async def _run_browser_test(self, chromium_exe, email, log_func):
         """Run the actual browser test."""
         try:
             async with async_playwright() as p:
                 browser = await p.chromium.launch(executable_path=chromium_exe, headless=False)
-                page = await browser.new_page()
-                await stealth_async(page)
+                context = await browser.new_context(viewport={'width':640, 'height':800},locale='en-US')
+                page = await context.new_page()
                 
-                await page.goto("https://www.google.com")
-                search_box = await page.wait_for_selector("textarea[name='q']")
-                await search_box.type(email)
+                urls = [
+                        "https://blackhatworld.com/",
+	                    "https://fv.pro/check-privacy/general",
+                        "https://deviceandbrowserinfo.com/are_you_a_bot",
+                        "https://fingerprint.com/products/bot-detection//",
+                        "https://abrahamjuliot.github.io/creepjs/",
+                        "https://bot.sannysoft.com/",
+                        "https://iphey.com/",
+                        "https://www.browserscan.net/",
+                        "https://pixelscan.net/"
+]
+                pattern = r'([^./]+)\.[^.]+$'   # Captures the string before the last dot
                 
-                log_func(f"Typed '{email}' into Google search")
                 await asyncio.sleep(5)
+                
+                for url in urls:
+
+                    domain_site = re.search(pattern, url)
+
+                    await page.goto(url)
+                    await asyncio.sleep(20)
+                    
+                    await page.screenshot(path=f'bot_detection_tests/{domain_site.group(1)}.png')
+                    log_func(f"Took screenshot in {domain_site.group(1)}")
+                #search_box = await page.wait_for_selector("textarea[name='q']")
+                #await search_box.type(email)
+                
+                #log_func(f"Typed '{email}' into Google search")
+                #await asyncio.sleep(5)
                 await browser.close()
                 return True
         except Exception as e:
