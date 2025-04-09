@@ -91,7 +91,7 @@ class PlaywrightManager:
         return True
 
 
-
+##-------------------Webdrivers instalation commands-------------------------##
     def _run_playwright_install(self, log_func):
         """Run the playwright install command."""
         try:
@@ -106,7 +106,6 @@ class PlaywrightManager:
         except subprocess.CalledProcessError as e:
             log_func(f"Installation failed: {e.stderr}")
             return False
-
 
 
     def _simulate_progress(self, update_progress):
@@ -147,14 +146,14 @@ class PlaywrightManager:
         return chromium_path
 
 
-##---------------------------------!!! BROWSER ENGINE  !!-----------------------------------------------------#
+##---------------------------------!!! BROWSER ENGINE  !!!-----------------------------------------------------#
     async def _run_browser_test(self, chromium_exe, email, log_func):
         """Run the actual browser test."""
         try:
             async with async_playwright() as p:
-                browser = await p.chromium.launch(executable_path=chromium_exe, headless=False)
-                context = await browser.new_context(viewport={'width':640, 'height':800},locale='en-US')
-                page = await context.new_page()
+                browser = await p.chromium.launch_persistent_context(no_viewport=True, channel="chrome", headless=False, user_data_dir="C:/Users/matut/Desktop/compilador Python/Automation_panel/sesion_data")
+                #context = await browser.new_context(viewport={'width':640, 'height':800},locale='en-US')
+                #page = await context.new_page()
                 
                 urls = [
                         "https://blackhatworld.com/",
@@ -167,18 +166,19 @@ class PlaywrightManager:
                         "https://www.browserscan.net/",
                         "https://pixelscan.net/"
 ]
-                pattern = r'([^./]+)\.[^.]+$'   # Captures the string before the last dot
+                pattern = r'([^./]+)\.[^.]+$'   # Captures the string before the last dot for naming the screenshots
                 
                 await asyncio.sleep(5)
                 
                 for url in urls:
 
                     domain_site = re.search(pattern, url)
+                    page = await browser.new_page()
 
                     await page.goto(url)
-                    await asyncio.sleep(20)
+                    await asyncio.sleep(30)
                     
-                    await page.screenshot(path=f'bot_detection_tests/{domain_site.group(1)}.png')
+                    await page.screenshot(path=f'bot_detection_tests_v2/{domain_site.group(1)}.png')
                     log_func(f"Took screenshot in {domain_site.group(1)}")
                 #search_box = await page.wait_for_selector("textarea[name='q']")
                 #await search_box.type(email)
