@@ -17,6 +17,7 @@ wheels/
 
 #sesion data
 sesion_data/
+sessions/
 
 ## uv lock
 uv.lock
