@@ -7,13 +7,8 @@ from account_section_manager import AccountsSection
 from settings_section import SettingsSection
 import datetime
 
-
-
 ctk.set_appearance_mode("Light")
 ctk.set_default_color_theme("blue")
-
-
-
 
 class Colors:
     PRIMARY = "#2D81FF"
@@ -22,10 +17,6 @@ class Colors:
     BG_DARK = "#1E293B"
     TEXT = "#334155"
     ACCENT = "#6366F1"
-
-
-
-
 
 class SocialMediaAutomationApp(ctk.CTk):
     def __init__(self):
@@ -37,7 +28,6 @@ class SocialMediaAutomationApp(ctk.CTk):
         self.colors = Colors()
         self.padding = 16
         self.corner_radius = 8
-        self.accounts = {}
         self.workflows = {}
 
         self.sidebar = Sidebar(self, self.show_section)
@@ -50,8 +40,10 @@ class SocialMediaAutomationApp(ctk.CTk):
             "automation": None,
             "settings": None
         }
-        self.sections["accounts"] = AccountsSection(self.content_frame, self.accounts, self.sections["monitoring"].log, self._refresh_automation_accounts)
-        self.sections["automation"] = AutomationSection(self.content_frame, self.accounts, self.workflows, self.sections["monitoring"].log)
+        # Initialize AccountsSection without passing accounts (loaded from JSON internally)
+        self.sections["accounts"] = AccountsSection(self.content_frame, self.sections["monitoring"].log, self._refresh_automation_accounts)
+        # Pass the accounts from AccountsSection to AutomationSection
+        self.sections["automation"] = AutomationSection(self.content_frame, self.sections["accounts"].accounts, self.workflows, self.sections["monitoring"].log)
         self.sections["settings"] = SettingsSection(self.content_frame, self.sections["monitoring"].log)
 
         self.show_section("accounts")
@@ -63,11 +55,9 @@ class SocialMediaAutomationApp(ctk.CTk):
         self.sections[section_name].pack(fill="both", expand=True)
 
     def _refresh_automation_accounts(self):
+        # Update the accounts in AutomationSection when accounts change
+        self.sections["automation"].accounts = self.sections["accounts"].accounts
         self.sections["automation"].refresh_accounts()
-
-
-
-
 
 class Sidebar(ctk.CTkFrame):
     def __init__(self, parent, show_section_callback):
@@ -100,10 +90,6 @@ class Sidebar(ctk.CTkFrame):
         ctk.set_appearance_mode(mode)
         parent_frame = self.master.content_frame
         parent_frame.configure(fg_color=self.colors.BG_DARK if mode == "Dark" else self.colors.BG_LIGHT)
-
-
-
-
 
 class MonitoringSection(ctk.CTkFrame):
     def __init__(self, parent):

@@ -4,6 +4,8 @@ from tkinter import filedialog, messagebox, ttk
 import datetime
 import asyncio
 import threading
+import json
+import os
 from playwright_manager import playwright_mgr
 
 class Colors:
@@ -15,14 +17,16 @@ class Colors:
     ACCENT = "#6366F1"
 
 class AccountsSection(ctk.CTkFrame):
-    def __init__(self, parent, accounts, log_func, refresh_callback):
+    def __init__(self, parent, log_func, refresh_callback):
         super().__init__(parent)
-        self.accounts = accounts if accounts is not None else {}
+        # Assign log_func first to ensure self.log is available
         self.log = log_func
         self.refresh_callback = refresh_callback
         self.padding = 16
         self.colors = Colors()
-        self.next_id = 1
+        # Now that self.log is set, we can safely call load_accounts
+        self.accounts = self.load_accounts()  # Load accounts from JSON
+        self.next_id = self.get_next_id()  # Determine the next ID based on loaded accounts
 
         header = ctk.CTkLabel(self, text="Account Management", font=("Segoe UI", 16, "bold"))
         header.pack(pady=(self.padding, 0), padx=self.padding, anchor="w")
@@ -47,7 +51,7 @@ class AccountsSection(ctk.CTkFrame):
             columns=("ID", "Email", "Password", "Activity", "Status", "Last activity"),
             show="headings",
             height=10,
-            selectmode="browse"
+            selectmode="extended"  # Allow multi-selection
         )
         self.accounts_tree.pack(pady=self.padding, padx=self.padding, fill="both", expand=True)
 
@@ -84,6 +88,36 @@ class AccountsSection(ctk.CTkFrame):
         self.log("AccountsSection initialized")
         self.refresh_treeview()
 
+    def load_accounts(self):
+        """Load accounts from a JSON file."""
+        accounts_file = "accounts.json"
+        if os.path.exists(accounts_file):
+            try:
+                with open(accounts_file, "r") as f:
+                    accounts = json.load(f)
+                    self.log(f"Loaded {len(accounts)} accounts from {accounts_file}")
+                    return accounts
+            except Exception as e:
+                self.log(f"Error loading accounts: {str(e)}")
+        return {}
+
+    def save_accounts(self):
+        """Save accounts to a JSON file."""
+        accounts_file = "accounts.json"
+        try:
+            with open(accounts_file, "w") as f:
+                json.dump(self.accounts, f, indent=4)
+            self.log(f"Saved {len(self.accounts)} accounts to {accounts_file}")
+        except Exception as e:
+            self.log(f"Error saving accounts: {str(e)}")
+
+    def get_next_id(self):
+        """Determine the next ID based on existing accounts."""
+        if not self.accounts:
+            return 1
+        max_id = max(int(account_id) for account_id in self.accounts.keys())
+        return max_id + 1
+
     def add_account(self, email=None, password=None):
         email = email or self.email_entry.get()
         password = password or self.pw_entry.get()
@@ -117,6 +151,7 @@ class AccountsSection(ctk.CTkFrame):
             self.log(f"Added account: {email} (ID: {account_id}, Total: {len(self.accounts)})")
             self.email_entry.delete(0, tk.END)
             self.pw_entry.delete(0, tk.END)
+            self.save_accounts()  # Save to JSON
             self.refresh_callback()
 
         except Exception as e:
@@ -182,6 +217,7 @@ class AccountsSection(ctk.CTkFrame):
                 self.accounts[account_id]["last_activity"]
             ))
             self.log(f"Edited account: {old_email} -> {new_email} (ID: {account_id})")
+            self.save_accounts()  # Save to JSON
             self.refresh_callback()
             edit_win.destroy()
 
@@ -201,6 +237,7 @@ class AccountsSection(ctk.CTkFrame):
             del self.accounts[account_id]
             self.accounts_tree.delete(account_id)
             self.log(f"Deleted account: {email} (ID: {account_id}, Total: {len(self.accounts)})")
+            self.save_accounts()  # Save to JSON
             self.refresh_callback()
 
     def update_account_status(self, updates):
@@ -220,6 +257,7 @@ class AccountsSection(ctk.CTkFrame):
                     self.accounts[account_id]["last_activity"]
                 ))
                 self.log(f"Updated status for account ID {account_id}: {self.accounts[account_id]['status']}")
+        self.save_accounts()  # Save to JSON after updating statuses
 
     def refresh_treeview(self):
         for item in self.accounts_tree.get_children():
@@ -233,23 +271,39 @@ class AccountsSection(ctk.CTkFrame):
     def test_account(self):
         selected = self.accounts_tree.selection()
         if not selected:
-            messagebox.showwarning("Warning", "Please select an account to test")
+            messagebox.showwarning("Warning", "Please select at least one account to test")
             return
 
-        account_id = selected[0]
-        email = self.accounts[account_id]["email"]
-        password = self.accounts[account_id]["password"]
-        self.log(f"Testing account: {email}")
+        # Collect account details for all selected accounts
+        accounts_to_test = []
+        for account_id in selected:
+            email = self.accounts[account_id]["email"]
+            password = self.accounts[account_id]["password"]
+            self.log(f"Preparing to test account: {email} (ID: {account_id})")
+            accounts_to_test.append({
+                "account_id": account_id,
+                "email": email,
+                "password": password
+            })
 
-        async def run_test():
-            success = await playwright_mgr.test_browser(email, password, self.log)
-            if success:
-                self.accounts[account_id]["last_activity"] = datetime.datetime.now().strftime("%Y-%m-d %H:%M:%S")
-                self.accounts[account_id]["status"] = "Tested"
-                self.after(0, self.refresh_treeview)
+        # Run tests concurrently in a separate thread
+        async def run_tests():
+            # Pass the list of accounts to PlaywrightManager
+            results = await playwright_mgr.test_multiple_accounts(accounts_to_test, self.log)
+            
+            # Update statuses based on results
+            updates = {}
+            current_time = datetime.datetime.now().strftime("%Y-%m-d %H:%M:%S")
+            for account_id, success in results.items():
+                updates[account_id] = {
+                    "last_activity": current_time,
+                    "status": "Tested" if success else "Failed",
+                    "activity": "Active" if success else "Inactive"
+                }
+            self.after(0, lambda: self.update_account_status(updates))
 
         def thread_target():
-            asyncio.run(run_test())
+            asyncio.run(run_tests())
 
         test_thread = threading.Thread(target=thread_target)
         test_thread.start()
