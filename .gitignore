@@ -23,3 +23,8 @@ sessions/
 uv.lock
 
 .mypy_cache
+
+
+facebook_login_tests/
+
+accounts.json
