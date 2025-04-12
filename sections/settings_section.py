@@ -2,7 +2,7 @@ import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox
 import threading
-from playwright_manager import playwright_mgr
+from sections.playwright_manager import playwright_mgr
 
 class SettingsSection(ctk.CTkFrame):
     def __init__(self, parent, log_func):
@@ -16,9 +16,6 @@ class SettingsSection(ctk.CTkFrame):
         download_btn = ctk.CTkButton(self, text="Download Webdrivers", command=self.download_webdrivers)
         download_btn.pack(pady=self.padding, padx=self.padding)
 
-        ctk.CTkLabel(self, text="Scraping Configuration (TBD)").pack(pady=self.padding, padx=self.padding)
-        self.content_entry = ctk.CTkEntry(self, placeholder_text="Custom Message", width=300)
-        self.content_entry.pack(pady=self.padding, padx=self.padding)
 
     def download_webdrivers(self):
         """Start webdriver download in a separate thread and show progress window."""

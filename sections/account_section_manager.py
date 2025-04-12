@@ -6,7 +6,7 @@ import asyncio
 import threading
 import json
 import os
-from playwright_manager import playwright_mgr
+from sections.playwright_manager import playwright_mgr
 
 class Colors:
     PRIMARY = "#2D81FF"

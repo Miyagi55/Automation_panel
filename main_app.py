@@ -2,9 +2,10 @@ import customtkinter as ctk
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import psutil
-from automation_section_manager import AutomationSection
-from account_section_manager import AccountsSection
-from settings_section import SettingsSection
+from sections.automation_section_manager import AutomationSection
+from sections.account_section_manager import AccountsSection
+from sections.settings_section import SettingsSection
+from sections.monitoring_section import MonitoringSection  # New import
 import datetime
 
 ctk.set_appearance_mode("Light")
@@ -90,33 +91,6 @@ class Sidebar(ctk.CTkFrame):
         ctk.set_appearance_mode(mode)
         parent_frame = self.master.content_frame
         parent_frame.configure(fg_color=self.colors.BG_DARK if mode == "Dark" else self.colors.BG_LIGHT)
-
-class MonitoringSection(ctk.CTkFrame):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.padding = 16
-
-        header = ctk.CTkLabel(self, text="Monitoring Dashboard", font=("Segoe UI", 16, "bold"))
-        header.pack(pady=(self.padding, 0), padx=self.padding, anchor="w")
-
-        self.log_text = ctk.CTkTextbox(self, height=200)
-        self.log_text.pack(pady=self.padding, padx=self.padding, fill="both", expand=True)
-
-        self.resource_label = ctk.CTkLabel(self, text="CPU: 0% | Memory: 0%")
-        self.resource_label.pack(pady=self.padding, padx=self.padding)
-
-        self.update_resources()
-
-    def log(self, message):
-        timestamp = datetime.datetime.now().strftime("%Y-%m-d %H:%M:%S")
-        self.log_text.insert(tk.END, f"[{timestamp}] {message}\n")
-        self.log_text.see(tk.END)
-
-    def update_resources(self):
-        cpu = psutil.cpu_percent()
-        memory = psutil.virtual_memory().percent
-        self.resource_label.configure(text=f"CPU: {cpu}% | Memory: {memory}%")
-        self.after(1000, self.update_resources)
 
 if __name__ == "__main__":
     app = SocialMediaAutomationApp()
