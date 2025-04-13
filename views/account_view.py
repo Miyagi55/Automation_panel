@@ -104,23 +104,36 @@ class AccountView(BaseView):
 
     def refresh(self):
         """Refresh the accounts table."""
+        # Clear existing items
         self.accounts_tree.delete(*self.accounts_tree.get_children())
 
+        # Get accounts from controller
         accounts = self.controllers["account"].get_all_accounts()
+
+        # If accounts is None or empty, just return
+        if not accounts:
+            return
+
+        # Insert accounts into treeview
         for account_id, account in accounts.items():
-            self.accounts_tree.insert(
-                "",
-                "end",
-                values=(
-                    account_id,
-                    account["email"],
-                    "*" * len(account["password"]),  # Mask password
-                    account["activity"],
-                    account["status"],
-                    account["last_activity"],
-                ),
-                iid=account_id,
-            )
+            try:
+                self.accounts_tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        account_id,
+                        account.get("email", ""),
+                        "*" * len(account.get("password", "")),  # Mask password
+                        account.get("activity", ""),
+                        account.get("status", ""),
+                        account.get("last_activity", ""),
+                    ),
+                    iid=account_id,
+                )
+            except Exception as e:
+                from utils.logger import logger
+
+                logger.error(f"Error adding account {account_id} to view: {str(e)}")
 
     def _add_account(self):
         """Add a new account."""

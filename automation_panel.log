@@ -1,0 +1,47 @@
+2025-04-13 03:37:20,656 - INFO - Resource monitoring started
+2025-04-13 03:37:20,719 - INFO - Application initialized
+2025-04-13 03:37:20,719 - INFO - Starting application
+2025-04-13 03:37:22,222 - INFO - Showing section: settings
+2025-04-13 03:37:23,007 - INFO - Showing section: accounts
+2025-04-13 03:37:23,441 - INFO - Showing section: accounts
+2025-04-13 03:37:23,788 - INFO - Showing section: accounts
+2025-04-13 03:37:24,001 - INFO - Showing section: accounts
+2025-04-13 03:37:24,189 - INFO - Showing section: accounts
+2025-04-13 03:37:24,357 - INFO - Showing section: accounts
+2025-04-13 03:37:25,300 - INFO - Showing section: automation
+2025-04-13 03:37:25,733 - INFO - Showing section: monitoring
+2025-04-13 03:37:26,249 - INFO - Showing section: settings
+2025-04-13 03:37:41,955 - INFO - Theme switched to Dark mode
+2025-04-13 03:37:42,497 - INFO - Theme switched to Light mode
+2025-04-13 03:37:42,868 - INFO - Theme switched to Dark mode
+2025-04-13 03:37:43,373 - INFO - Theme switched to Light mode
+2025-04-13 03:45:21,193 - INFO - Resource monitoring started
+2025-04-13 03:45:21,194 - ERROR - Error monitoring resources: 'FacebookAutomationApp' object has no attribute 'views'
+2025-04-13 03:50:00,648 - INFO - Resource monitoring started
+2025-04-13 03:50:00,648 - ERROR - Error monitoring resources: 'FacebookAutomationApp' object has no attribute 'views'
+2025-04-13 03:52:38,572 - INFO - Resource monitoring started
+2025-04-13 03:52:38,572 - ERROR - Error monitoring resources: 'FacebookAutomationApp' object has no attribute 'views'
+2025-04-13 03:53:41,505 - INFO - Resource monitoring started
+2025-04-13 03:53:41,505 - ERROR - Error monitoring resources: '_tkinter.tkapp' object has no attribute 'views'
+2025-04-13 03:54:13,737 - INFO - Resource monitoring started
+2025-04-13 03:54:13,737 - ERROR - Error monitoring resources: '_tkinter.tkapp' object has no attribute 'views'
+2025-04-13 03:54:14,142 - INFO - Showing accounts section
+2025-04-13 03:54:14,153 - INFO - Application initialized
+2025-04-13 03:54:25,672 - INFO - Showing monitoring section
+2025-04-13 03:54:26,430 - INFO - Showing settings section
+2025-04-13 03:54:29,051 - INFO - Showing settings section
+2025-04-13 03:54:34,335 - INFO - Showing monitoring section
+2025-04-13 03:54:38,983 - INFO - No UI log clear callback registered
+2025-04-13 03:54:39,785 - INFO - Showing monitoring section
+2025-04-13 03:54:43,016 - INFO - Showing accounts section
+2025-04-13 03:54:45,001 - INFO - Showing monitoring section
+2025-04-13 03:54:45,652 - INFO - Showing settings section
+2025-04-13 03:54:46,257 - INFO - Showing monitoring section
+2025-04-13 03:54:47,741 - INFO - Showing settings section
+2025-04-13 04:03:20,272 - INFO - Resource monitoring started
+2025-04-13 04:03:20,272 - ERROR - Error monitoring resources: 'FacebookAutomationApp' object has no attribute 'views'
+2025-04-13 04:03:20,958 - INFO - Showing accounts section
+2025-04-13 04:03:20,991 - INFO - Application initialized
+2025-04-13 04:03:21,007 - INFO - Starting application
+2025-04-13 04:03:22,437 - INFO - Showing automation section
+2025-04-13 04:03:25,118 - INFO - Showing accounts section

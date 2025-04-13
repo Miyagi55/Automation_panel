@@ -178,8 +178,20 @@ class AccountSelector(ctk.CTkFrame):
     def set_accounts(self, accounts: Dict[str, Dict[str, Any]]):
         """Set the accounts to display in the listbox."""
         self.listbox.delete(0, tk.END)
-        for account in accounts.values():
-            self.listbox.insert(tk.END, f"{account['id']} - {account['email']}")
+
+        # If accounts is None or empty, just return
+        if not accounts:
+            return
+
+        for account_id, account in accounts.items():
+            try:
+                account_id = account.get("id", account_id)
+                email = account.get("email", "unknown")
+                self.listbox.insert(tk.END, f"{account_id} - {email}")
+            except Exception as e:
+                logger.error(
+                    f"Error adding account {account_id} to automation selector: {str(e)}"
+                )
 
     def get_selected_accounts(self) -> List[str]:
         """Get the emails of selected accounts."""
@@ -387,14 +399,20 @@ class AutomationView(BaseView):
 
     def refresh(self):
         """Refresh the view's content."""
-        # Populate account selector
-        accounts = self.controllers["account"].get_all_accounts()
-        self.account_selector.set_accounts(accounts)
+        try:
+            # Populate account selector
+            if "account" in self.controllers:
+                accounts = self.controllers["account"].get_all_accounts()
+                self.account_selector.set_accounts(accounts)
 
-        # Populate workflow list
-        workflows = self.controllers["automation"].get_all_workflows()
-        for name in workflows:
-            self.workflow_list.add_workflow(name)
+            # Populate workflow list
+            if "automation" in self.controllers:
+                workflows = self.controllers["automation"].get_all_workflows()
+                if workflows:
+                    for name in workflows:
+                        self.workflow_list.add_workflow(name)
+        except Exception as e:
+            logger.error(f"Error refreshing automation view: {str(e)}")
 
     def _save_workflow(self):
         """Save the current workflow configuration."""
