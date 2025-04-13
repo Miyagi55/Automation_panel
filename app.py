@@ -36,6 +36,8 @@ class FacebookAutomationApp:
         self.setup_gui()
         self.setup_controllers()
         self.setup_views()
+        # Start monitoring after views are created
+        self.monitoring_controller.start_monitoring()
         logger.info("Application initialized")
 
     def setup_gui(self):
@@ -85,8 +87,7 @@ class FacebookAutomationApp:
             "settings": self.settings_controller,  # Add the settings controller
         }
 
-        # Start monitoring
-        self.monitoring_controller.start_monitoring()
+        # Don't start monitoring here - moved to init after setup_views()
 
     def setup_views(self):
         """Set up the views."""
@@ -172,10 +173,14 @@ class FacebookAutomationApp:
 
     def log_to_ui(self, message: str):
         """Log a message to the UI."""
-        if "monitoring" in self.views:
-            self.views["monitoring"].add_log(message)
-        else:
-            print(message)  # Fallback to console
+        try:
+            if "monitoring" in self.views:
+                self.views["monitoring"].add_log(message)
+            else:
+                print(message)  # Fallback to console
+        except Exception as e:
+            print(f"Error logging to UI: {str(e)}")
+            print(message)  # Ensure message is still displayed
 
     def run(self):
         """Run the application."""

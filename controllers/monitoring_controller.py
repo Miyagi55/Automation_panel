@@ -72,7 +72,15 @@ class MonitoringController:
 
                 # Call the update callback with the data
                 if self.update_callback:
-                    self.update_callback(resource_data)
+                    try:
+                        self.update_callback(resource_data)
+                    except AttributeError:
+                        # This can happen during initialization when UI components aren't ready
+                        # Don't log every occurrence to avoid spam during startup
+                        time.sleep(0.5)  # Short sleep and continue
+                    except Exception as e:
+                        # Log other exceptions
+                        logger.error(f"Error in monitoring update callback: {str(e)}")
 
                 # Sleep for the update interval
                 time.sleep(self.update_interval)
