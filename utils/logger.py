@@ -4,6 +4,7 @@ Centralized logging module for consistent logging across the application.
 
 import datetime
 import logging
+from pathlib import Path
 from typing import Any, Callable
 
 
@@ -25,12 +26,24 @@ class Logger:
         """Initialize the logger."""
         self.ui_callback = None
 
+        # Ensure logs directory exists
+        logs_dir = Path("logs")
+        logs_dir.mkdir(exist_ok=True)
+
+        # Generate log filename with date
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        log_file = logs_dir / f"automation_panel_{today}.log"
+
         # Set up Python's logging
         self.logger = logging.getLogger("automation_panel")
         self.logger.setLevel(logging.INFO)
 
+        # Clear any existing handlers (important for module reloads)
+        if self.logger.handlers:
+            self.logger.handlers.clear()
+
         # File handler for persistent logs
-        file_handler = logging.FileHandler("automation_panel.log")
+        file_handler = logging.FileHandler(log_file)
         file_handler.setFormatter(
             logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
         )
@@ -42,6 +55,9 @@ class Logger:
             logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
         )
         self.logger.addHandler(console_handler)
+
+        # Log initialization
+        self.logger.info(f"Logger initialized. Logging to {log_file}")
 
     def set_ui_callback(self, callback: Callable[[str], Any]):
         """Set the UI callback function for log display."""

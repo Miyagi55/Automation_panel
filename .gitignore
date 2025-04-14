@@ -28,3 +28,7 @@ uv.lock
 facebook_login_tests/
 
 accounts.json
+
+# Logs
+logs/
+*.log
