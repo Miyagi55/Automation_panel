@@ -128,3 +128,11 @@ class AccountModel:
 
         self.save_accounts()
         return True
+
+    def update_account_cookies(self, account_id: str, cookies: list[dict]) -> bool:
+        """Update cookies for a given account, merging with existing cookies, and save atomically."""
+        if account_id not in self.accounts:
+            return False
+        # Store cookies as a list of dicts for compatibility with Playwright
+        self.accounts[account_id]["cookies"] = cookies
+        return self.save_accounts()

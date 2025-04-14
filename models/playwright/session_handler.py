@@ -30,10 +30,12 @@ class SessionHandler:
         user: str,
         password: str,
         log_func: Callable[[str], None],
+        keep_browser_open_seconds: int = 0,
     ) -> bool:
         """
         Login to Facebook using account credentials.
         Returns True if login was successful, False otherwise.
+        Optionally keeps the browser open for manual testing.
         """
         chromium_exe = self.browser_manager.get_chromium_executable(log_func)
         if not chromium_exe:
@@ -100,6 +102,28 @@ class SessionHandler:
                     log_func(f"Login failed for account {account_id}")
                     # Take a screenshot to debug
                     await page.screenshot(path=f"{user_data_dir}/login_failed.png")
+
+                # --- Persist cookies after login attempt ---
+                try:
+                    cookies = await browser.cookies()
+                    cookies_dicts = [dict(cookie) for cookie in cookies]
+                    from models.account_model import AccountModel
+
+                    account_model = AccountModel()
+                    account_model.update_account_cookies(account_id, cookies_dicts)
+                    log_func(f"Persisted cookies for account {account_id}")
+                except Exception as e:
+                    log_func(
+                        f"Failed to persist cookies for account {account_id}: {str(e)}"
+                    )
+                # --- End persist cookies ---
+
+                # If requested, keep the browser open for manual testing
+                if keep_browser_open_seconds > 0:
+                    log_func(
+                        f"Keeping browser open for {keep_browser_open_seconds} seconds for manual testing..."
+                    )
+                    await asyncio.sleep(keep_browser_open_seconds)
 
                 await browser.close()
                 return login_successful

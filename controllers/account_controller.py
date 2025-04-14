@@ -10,6 +10,8 @@ from models.account_model import AccountModel
 from models.playwright.session_handler import SessionHandler
 from utils.logger import logger
 
+ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS = 300  # 5 minutes, edit as needed
+
 
 class AccountController:
     """
@@ -146,7 +148,11 @@ class AccountController:
             try:
                 result = loop.run_until_complete(
                     self.session_handler.login_account(
-                        account_id, account["user"], account["password"], logger.info
+                        account_id,
+                        account["user"],
+                        account["password"],
+                        logger.info,
+                        keep_browser_open_seconds=ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS,
                     )
                 )
 
