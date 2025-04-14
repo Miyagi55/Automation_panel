@@ -27,7 +27,7 @@ class SessionHandler:
     async def login_account(
         self,
         account_id: str,
-        email: str,
+        user: str,
         password: str,
         log_func: Callable[[str], None],
     ) -> bool:
@@ -65,7 +65,7 @@ class SessionHandler:
                 )
 
                 # Type the email with random delays between characters
-                await self._type_with_human_delay(email_field, email, log_func)
+                await self._type_with_human_delay(email_field, user, log_func)
                 await asyncio.sleep(random.uniform(0.5, 2.0))
                 await self._type_with_human_delay(password_field, password, log_func)
 
@@ -142,7 +142,7 @@ class SessionHandler:
                 log_func(f"Starting test for account {account['account_id']}")
                 success = await self.login_account(
                     account["account_id"],
-                    account["email"],
+                    account["user"],
                     account["password"],
                     log_func,
                 )

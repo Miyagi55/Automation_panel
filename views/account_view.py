@@ -42,8 +42,10 @@ class AccountView(BaseView):
         add_frame = ctk.CTkFrame(self)
         add_frame.pack(pady=self.padding, padx=self.padding, fill="x")
 
-        self.email_entry = ctk.CTkEntry(add_frame, placeholder_text="Email", width=200)
-        self.email_entry.pack(side="left", padx=(0, self.padding // 2))
+        self.user_entry = ctk.CTkEntry(
+            add_frame, placeholder_text="Username", width=200
+        )
+        self.user_entry.pack(side="left", padx=(0, self.padding // 2))
 
         self.pw_entry = ctk.CTkEntry(
             add_frame, placeholder_text="Password", width=200, show="*"
@@ -57,7 +59,14 @@ class AccountView(BaseView):
         """Set up the accounts table."""
         self.accounts_tree = ttk.Treeview(
             self,
-            columns=("ID", "Email", "Password", "Activity", "Status", "Last activity"),
+            columns=(
+                "ID",
+                "Username",
+                "Password",
+                "Activity",
+                "Status",
+                "Last activity",
+            ),
             show="headings",
             height=10,
             selectmode="extended",  # Allow multi-selection
@@ -67,14 +76,14 @@ class AccountView(BaseView):
         )
 
         self.accounts_tree.heading("ID", text="ID")
-        self.accounts_tree.heading("Email", text="Email")
+        self.accounts_tree.heading("Username", text="Username")
         self.accounts_tree.heading("Password", text="Password")
         self.accounts_tree.heading("Activity", text="Activity")
         self.accounts_tree.heading("Status", text="Status")
         self.accounts_tree.heading("Last activity", text="Last Activity")
 
         self.accounts_tree.column("ID", width=50)
-        self.accounts_tree.column("Email", width=150)
+        self.accounts_tree.column("Username", width=150)
         self.accounts_tree.column("Password", width=100)
         self.accounts_tree.column("Activity", width=100)
         self.accounts_tree.column("Status", width=80)
@@ -122,7 +131,7 @@ class AccountView(BaseView):
                     "end",
                     values=(
                         account_id,
-                        account.get("email", ""),
+                        account.get("user", ""),
                         "*" * len(account.get("password", "")),  # Mask password
                         account.get("activity", ""),
                         account.get("status", ""),
@@ -137,13 +146,13 @@ class AccountView(BaseView):
 
     def _add_account(self):
         """Add a new account."""
-        email = self.email_entry.get()
+        user = self.user_entry.get()
         password = self.pw_entry.get()
 
-        account_id = self.controllers["account"].add_account(email, password)
+        account_id = self.controllers["account"].add_account(user, password)
 
         if account_id:
-            self.email_entry.delete(0, tk.END)
+            self.user_entry.delete(0, tk.END)
             self.pw_entry.delete(0, tk.END)
             self.refresh()
 
@@ -166,10 +175,10 @@ class AccountView(BaseView):
         edit_win.transient(self)  # Make the window modal
         edit_win.grab_set()
 
-        ctk.CTkLabel(edit_win, text="Email").grid(row=0, column=0, padx=5, pady=5)
-        email_entry = ctk.CTkEntry(edit_win, width=200)
-        email_entry.grid(row=0, column=1, padx=5, pady=5)
-        email_entry.insert(0, account["email"])
+        ctk.CTkLabel(edit_win, text="Username").grid(row=0, column=0, padx=5, pady=5)
+        user_entry = ctk.CTkEntry(edit_win, width=200)
+        user_entry.grid(row=0, column=1, padx=5, pady=5)
+        user_entry.insert(0, account["user"])
 
         ctk.CTkLabel(edit_win, text="Password").grid(row=1, column=0, padx=5, pady=5)
         pw_entry = ctk.CTkEntry(edit_win, width=200, show="*")
@@ -178,7 +187,7 @@ class AccountView(BaseView):
 
         def save_changes():
             success = self.controllers["account"].update_account(
-                account_id, email_entry.get(), pw_entry.get()
+                account_id, user_entry.get(), pw_entry.get()
             )
             if success:
                 edit_win.destroy()
@@ -225,7 +234,7 @@ class AccountView(BaseView):
                 account_id,
                 values=(
                     account_id,
-                    self.accounts_tree.item(account_id)["values"][1],  # Email
+                    self.accounts_tree.item(account_id)["values"][1],  # Username
                     self.accounts_tree.item(account_id)["values"][2],  # Password
                     "Testing",
                     "Testing",

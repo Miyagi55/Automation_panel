@@ -45,12 +45,12 @@ class AccountModel:
         max_id = max(int(account_id) for account_id in self.accounts.keys())
         return max_id + 1
 
-    def add_account(self, email: str, password: str) -> Optional[str]:
+    def add_account(self, user: str, password: str) -> Optional[str]:
         """Add a new account."""
-        if not email or not password:
+        if not user or not password:
             return None
 
-        if any(acc["email"] == email for acc in self.accounts.values()):
+        if any(acc.get("user") == user for acc in self.accounts.values()):
             return None
 
         try:
@@ -59,11 +59,14 @@ class AccountModel:
 
             account_data = {
                 "id": account_id,
-                "email": email,
+                "user": user,
                 "password": password,
                 "activity": "Inactive",
                 "status": "Logged Out",
                 "last_activity": "",
+                "proxy": "",
+                "user_agent": "",
+                "cookies": {},
             }
             self.accounts[account_id] = account_data
             self.save_accounts()
@@ -72,20 +75,20 @@ class AccountModel:
             print(f"Error adding account: {str(e)}")
             return None
 
-    def update_account(self, account_id: str, email: str, password: str) -> bool:
+    def update_account(self, account_id: str, user: str, password: str) -> bool:
         """Update an existing account."""
         if account_id not in self.accounts:
             return False
 
-        old_email = self.accounts[account_id]["email"]
-        if email != old_email and any(
-            acc["email"] == email
+        old_user = self.accounts[account_id]["user"]
+        if user != old_user and any(
+            acc.get("user") == user
             for acc_id, acc in self.accounts.items()
             if acc_id != account_id
         ):
             return False
 
-        self.accounts[account_id].update({"email": email, "password": password})
+        self.accounts[account_id].update({"user": user, "password": password})
         self.save_accounts()
         return True
 

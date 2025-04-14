@@ -22,42 +22,42 @@ class AccountController:
         self.session_handler = SessionHandler()
         self.update_ui_callback = update_ui_callback
 
-    def add_account(self, email: str, password: str) -> Optional[str]:
+    def add_account(self, user: str, password: str) -> Optional[str]:
         """Add a new account."""
-        if not email or not password:
-            logger.warning("Email and password required")
+        if not user or not password:
+            logger.warning("Username and password required")
             return None
 
-        account_id = self.account_model.add_account(email, password)
+        account_id = self.account_model.add_account(user, password)
         if account_id:
             logger.info(
-                f"Added account: {email} (ID: {account_id}, Total: {len(self.account_model.accounts)})"
+                f"Added account: {user} (ID: {account_id}, Total: {len(self.account_model.accounts)})"
             )
             if self.update_ui_callback:
                 self.update_ui_callback()
             return account_id
         else:
-            logger.warning(f"Failed to add account: {email}")
+            logger.warning(f"Failed to add account: {user}")
             return None
 
-    def update_account(self, account_id: str, email: str, password: str) -> bool:
+    def update_account(self, account_id: str, user: str, password: str) -> bool:
         """Update an existing account."""
-        if not account_id or not email or not password:
-            logger.warning("Account ID, email, and password required")
+        if not account_id or not user or not password:
+            logger.warning("Account ID, username, and password required")
             return False
 
         account = self.account_model.get_account(account_id)
-        old_email = account["email"] if account else None
+        old_user = account["user"] if account else None
 
-        success = self.account_model.update_account(account_id, email, password)
+        success = self.account_model.update_account(account_id, user, password)
 
         if success:
-            logger.info(f"Updated account: {old_email} -> {email} (ID: {account_id})")
+            logger.info(f"Updated account: {old_user} -> {user} (ID: {account_id})")
             if self.update_ui_callback:
                 self.update_ui_callback()
             return True
         else:
-            logger.warning(f"Failed to update account: {old_email}")
+            logger.warning(f"Failed to update account: {old_user}")
             return False
 
     def delete_account(self, account_id: str) -> bool:
@@ -67,18 +67,18 @@ class AccountController:
             logger.warning(f"Account not found: {account_id}")
             return False
 
-        email = account["email"]
+        user = account["user"]
         success = self.account_model.delete_account(account_id)
 
         if success:
             logger.info(
-                f"Deleted account: {email} (ID: {account_id}, Total: {len(self.account_model.accounts)})"
+                f"Deleted account: {user} (ID: {account_id}, Total: {len(self.account_model.accounts)})"
             )
             if self.update_ui_callback:
                 self.update_ui_callback()
             return True
         else:
-            logger.warning(f"Failed to delete account: {email}")
+            logger.warning(f"Failed to delete account: {user}")
             return False
 
     def get_all_accounts(self) -> Dict[str, Dict[str, Any]]:
@@ -116,8 +116,8 @@ class AccountController:
                 count = 0
                 for line in f:
                     try:
-                        email, password = line.strip().split(",")
-                        account_id = self.add_account(email, password)
+                        user, password = line.strip().split(",")
+                        account_id = self.add_account(user, password)
                         if account_id:
                             count += 1
                     except ValueError:
@@ -146,7 +146,7 @@ class AccountController:
             try:
                 result = loop.run_until_complete(
                     self.session_handler.login_account(
-                        account_id, account["email"], account["password"], logger.info
+                        account_id, account["user"], account["password"], logger.info
                     )
                 )
 
@@ -180,7 +180,7 @@ class AccountController:
                 accounts_to_test.append(
                     {
                         "account_id": account_id,
-                        "email": account["email"],
+                        "user": account["user"],
                         "password": account["password"],
                     }
                 )
