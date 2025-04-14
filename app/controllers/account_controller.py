@@ -6,9 +6,9 @@ import asyncio
 import threading
 from typing import Any, Callable, Dict, List, Optional
 
-from models.account_model import AccountModel
-from models.playwright.session_handler import SessionHandler
-from utils.logger import logger
+from app.models.account_model import AccountModel
+from app.models.playwright.session_handler import SessionHandler
+from app.utils.logger import logger
 
 ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS = 300  # 5 minutes, edit as needed
 

@@ -8,7 +8,7 @@ from typing import Any, Dict
 
 import customtkinter as ctk
 
-from utils.logger import logger
+from app.utils.logger import logger
 
 from .base_view import BaseView
 

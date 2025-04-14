@@ -5,8 +5,8 @@ Browser controller to manage Playwright browser functionality.
 import threading
 from typing import Callable, Optional
 
-from models.playwright.browser_manager import BrowserManager
-from utils.logger import logger
+from app.models.playwright.browser_manager import BrowserManager
+from app.utils.logger import logger
 
 
 class BrowserController:

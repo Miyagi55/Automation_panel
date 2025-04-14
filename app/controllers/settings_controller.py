@@ -5,7 +5,7 @@ Settings controller to manage application settings.
 import os
 from typing import Any, Dict
 
-from utils.logger import logger
+from app.utils.logger import logger
 
 
 class SettingsController:

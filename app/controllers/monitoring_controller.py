@@ -9,7 +9,7 @@ from typing import Any, Callable, Dict, Optional
 
 import psutil
 
-from utils.logger import logger
+from app.utils.logger import logger
 
 
 class MonitoringController:

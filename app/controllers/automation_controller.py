@@ -10,9 +10,9 @@ import threading
 import time
 from typing import Any, Callable, Dict, List, Optional
 
-from models.account_model import AccountModel
-from models.playwright.automation_handler import AutomationHandler
-from utils.logger import logger
+from app.models.account_model import AccountModel
+from app.models.playwright.automation_handler import AutomationHandler
+from app.utils.logger import logger
 
 
 class WorkflowModel:

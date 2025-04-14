@@ -6,6 +6,8 @@ import asyncio
 import random
 from typing import Any, Callable, Dict, List, Tuple
 
+from app.models.account_model import AccountModel
+
 from .browser_manager import BrowserManager
 
 # Optional import to prevent immediate errors if package not installed
@@ -107,7 +109,6 @@ class SessionHandler:
                 try:
                     cookies = await browser.cookies()
                     cookies_dicts = [dict(cookie) for cookie in cookies]
-                    from models.account_model import AccountModel
 
                     account_model = AccountModel()
                     account_model.update_account_cookies(account_id, cookies_dicts)

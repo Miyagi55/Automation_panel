@@ -8,6 +8,8 @@ from typing import Any, Dict
 
 import customtkinter as ctk
 
+from app.utils.logger import logger
+
 from .base_view import BaseView
 
 
@@ -140,8 +142,6 @@ class AccountView(BaseView):
                     iid=account_id,
                 )
             except Exception as e:
-                from utils.logger import logger
-
                 logger.error(f"Error adding account {account_id} to view: {str(e)}")
 
     def _add_account(self):
