@@ -31,4 +31,5 @@ accounts.json
 
 # Logs
 logs/
+data/
 *.log
