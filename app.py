@@ -11,19 +11,19 @@ from typing import Any, Dict
 import customtkinter as ctk
 
 # Import controllers
-from controllers.account_controller import AccountController
-from controllers.automation_controller import AutomationController
-from controllers.browser_controller import BrowserController
-from controllers.monitoring_controller import MonitoringController
+from app.controllers.account_controller import AccountController
+from app.controllers.automation_controller import AutomationController
+from app.controllers.browser_controller import BrowserController
+from app.controllers.monitoring_controller import MonitoringController
 
 # Import logger
-from utils.logger import logger
+from app.utils.logger import logger
 
 # Import views
-from views.account_view import AccountView
-from views.automation_view import AutomationView
-from views.monitoring_view import MonitoringView
-from views.settings_view import SettingsView
+from app.views.account_view import AccountView
+from app.views.automation_view import AutomationView
+from app.views.monitoring_view import MonitoringView
+from app.views.settings_view import SettingsView
 
 
 class FacebookAutomationApp:
@@ -74,7 +74,7 @@ class FacebookAutomationApp:
             progress_callback=self.update_workflow_progress,
         )
         # Add the settings controller
-        from controllers.settings_controller import SettingsController
+        from app.controllers.settings_controller import SettingsController
 
         self.settings_controller = SettingsController()
 
