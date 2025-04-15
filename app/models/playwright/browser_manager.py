@@ -7,7 +7,7 @@ import subprocess
 import time
 from pathlib import Path
 from typing import Callable, Optional
-from utils.config import *
+from app.utils.config import ROOT, SESSIONS
 
 
 class BrowserManager:
@@ -18,10 +18,7 @@ class BrowserManager:
 
     _instance = None
     _webdriver_path = None
-    _project_root = (
-        Path(__file__).resolve().parent.parent.parent.parent
-    )  # NOTE : temp fix, improve this later
-    _sessions_base_dir = str(_project_root / "data" / "sessions")
+    _sessions_base_dir = str(SESSIONS)
 
     def __new__(cls):
         """Singleton pattern to ensure only one browser manager exists."""

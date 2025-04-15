@@ -1,8 +1,10 @@
 """
 Account model to manage Facebook accounts data.
 """
+
 import json
 import os
+from pathlib import Path
 from typing import Any, Dict, Optional
 from app.utils.config import ACCOUNTS_FILE
 
@@ -13,7 +15,10 @@ class AccountModel:
     Handles loading, saving, and manipulating account data.
     """
 
-    def __init__(self, accounts_file: str = str(ACCOUNTS_FILE)):
+    def __init__(
+        self,
+        accounts_file: str = str(ACCOUNTS_FILE),
+    ):
         self.accounts_file = accounts_file
         self.accounts: Dict[str, Dict[str, Any]] = self.load_accounts()
         self.next_id = self._get_next_id()
