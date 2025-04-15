@@ -1,0 +1,489 @@
+"""
+Automation view for managing workflows and automation tasks.
+"""
+
+import tkinter as tk
+from tkinter import messagebox
+from typing import Any, Dict, List
+
+import customtkinter as ctk
+
+from app.utils.logger import logger
+
+from .base_view import BaseView
+
+
+class ActionConfigPanel(ctk.CTkFrame):
+    """Panel for configuring actions for a workflow."""
+
+    ACTION_TYPES = ["Comments", "Posts", "Live Views", "Likes", "Shares"]
+
+    def __init__(self, parent, padding: int = 16):
+        super().__init__(parent)
+        self.padding = padding
+        self.action_vars = {}
+        self.action_inputs = {}
+        self.pack(side="left", padx=(0, padding), fill="y")
+        self._setup_checkboxes()
+
+    def _setup_checkboxes(self):
+        """Create checkboxes for each action type."""
+        title = ctk.CTkLabel(
+            self, text="Select Actions:", font=("Segoe UI", 12, "bold")
+        )
+        title.pack(pady=(0, self.padding // 2), anchor="w")
+
+        for action in self.ACTION_TYPES:
+            var = ctk.BooleanVar()
+            ctk.CTkCheckBox(
+                self,
+                text=action,
+                variable=var,
+                command=lambda a=action: self._toggle_input(a),
+            ).pack(pady=self.padding // 2, anchor="w")
+            self.action_vars[action] = var
+
+    def _toggle_input(self, action: str):
+        """Toggle visibility of input fields for selected actions."""
+        if action not in self.action_inputs:
+            self.action_inputs[action] = self._create_input_frame(action)
+
+        frame = self.action_inputs[action]
+        if self.action_vars[action].get():
+            frame.pack(pady=self.padding // 2, fill="x")
+        else:
+            frame.pack_forget()
+
+    def _create_input_frame(self, action: str) -> ctk.CTkFrame:
+        """Create dynamic input frames for different action types."""
+        frame = ctk.CTkFrame(self)
+
+        input_configs = {
+            "Comments": {
+                "label": "Post Link:",
+                "width": 150,
+                "extras": [("Load Comments", self._load_comments_file)],
+            },
+            "Live Views": {"label": "Views Link:", "width": 200},
+            "Likes": {"label": "Likes Link:", "width": 200},
+            "Shares": {"label": "Shares Link:", "width": 200},
+            "Posts": {
+                "label": "Post Content:",
+                "width": 200,
+                "entry_name": "content_entry",
+            },
+        }
+
+        config = input_configs[action]
+        ctk.CTkLabel(frame, text=config["label"]).pack(side="left")
+
+        entry_name = config.get("entry_name", "link_entry")
+        frame.__dict__[entry_name] = ctk.CTkEntry(frame, width=config["width"])
+        frame.__dict__[entry_name].pack(side="left", padx=5)
+
+        if "extras" in config:
+            for text, command in config["extras"]:
+                ctk.CTkButton(
+                    frame, text=text, command=lambda a=action, cmd=command: cmd(a)
+                ).pack(side="left")
+
+        return frame
+
+    def _load_comments_file(self, action: str):
+        """Load comments file for comments action."""
+        from tkinter import filedialog
+
+        file_path = filedialog.askopenfilename(filetypes=[("Text files", "*.txt")])
+        if file_path:
+            self.action_inputs[action].comments_file = file_path
+            # Set filename as hint in the entry
+            filename = file_path.split("/")[-1]
+            self.action_inputs[action].link_entry.delete(0, tk.END)
+            self.action_inputs[action].link_entry.insert(0, f"File: {filename}")
+
+    def get_selected_actions(self) -> Dict[str, dict]:
+        """Retrieve selected actions with their configuration."""
+        actions = {}
+        for action, var in self.action_vars.items():
+            if var.get() and action in self.action_inputs:
+                frame = self.action_inputs[action]
+                actions[action] = self._get_action_details(action, frame)
+        return actions
+
+    def _get_action_details(self, action: str, frame: ctk.CTkFrame) -> dict:
+        """Extract action details based on action type."""
+        if action == "Comments":
+            return {
+                "link": frame.link_entry.get(),
+                "comments_file": getattr(frame, "comments_file", None),
+            }
+        elif action in ["Live Views", "Likes", "Shares"]:
+            return {"link": frame.link_entry.get()}
+        elif action == "Posts":
+            return {"content": frame.content_entry.get()}
+
+    def reset(self):
+        """Reset all action configurations."""
+        for var in self.action_vars.values():
+            var.set(False)
+        for frame in self.action_inputs.values():
+            frame.pack_forget()
+
+
+class AccountSelector(ctk.CTkFrame):
+    """UI component for selecting accounts."""
+
+    def __init__(self, parent, padding: int = 16):
+        super().__init__(parent)
+        self.padding = padding
+        self._setup_ui()
+
+    def _setup_ui(self):
+        """Set up the account selection user interface."""
+        title = ctk.CTkLabel(
+            self, text="Select Accounts:", font=("Segoe UI", 12, "bold")
+        )
+        title.pack(anchor="w", pady=(0, self.padding // 2))
+
+        listbox_frame = ctk.CTkFrame(self)
+        listbox_frame.pack(fill="both", expand=True)
+
+        self.listbox = tk.Listbox(
+            listbox_frame,
+            height=10,
+            width=30,
+            selectmode=tk.MULTIPLE,
+            font=("Segoe UI", 12),
+        )
+
+        self.scrollbar = tk.Scrollbar(
+            listbox_frame, orient="vertical", command=self.listbox.yview
+        )
+        self.listbox.config(yscrollcommand=self.scrollbar.set)
+
+        self.listbox.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="left", fill="y")
+
+        select_frame = ctk.CTkFrame(self)
+        select_frame.pack(pady=self.padding // 2, fill="x")
+
+        ctk.CTkLabel(select_frame, text="Select Range:").pack(side="left")
+        self.select_entry = ctk.CTkEntry(select_frame, width=100)
+        self.select_entry.pack(side="left", padx=5)
+
+        ctk.CTkButton(select_frame, text="Select", command=self._select_range).pack(
+            side="left"
+        )
+
+    def set_accounts(self, accounts: Dict[str, Dict[str, Any]]):
+        """Set the accounts to display in the listbox."""
+        self.listbox.delete(0, tk.END)
+
+        # If accounts is None or empty, just return
+        if not accounts:
+            return
+
+        for account_id, account in accounts.items():
+            try:
+                account_id = account.get("id", account_id)
+                email = account.get("email", "unknown")
+                self.listbox.insert(tk.END, f"{account_id} - {email}")
+            except Exception as e:
+                logger.error(
+                    f"Error adding account {account_id} to automation selector: {str(e)}"
+                )
+
+    def get_selected_accounts(self) -> List[str]:
+        """Get the emails of selected accounts."""
+        selected_indices = self.listbox.curselection()
+        if not selected_indices:
+            return []
+
+        items = [self.listbox.get(i) for i in selected_indices]
+        return [item.split(" - ")[1] for item in items]  # Extract emails
+
+    def _select_range(self):
+        """Select accounts within a specified ID range."""
+        try:
+            range_text = self.select_entry.get().strip()
+            if not range_text:
+                return
+
+            if "-" in range_text:
+                start, end = map(int, range_text.split("-"))
+
+                self.listbox.selection_clear(0, tk.END)
+
+                for i in range(self.listbox.size()):
+                    item = self.listbox.get(i)
+                    item_id = int(item.split(" - ")[0])
+                    if start <= item_id <= end:
+                        self.listbox.selection_set(i)
+            else:
+                # Single ID
+                id_num = int(range_text)
+                for i in range(self.listbox.size()):
+                    item = self.listbox.get(i)
+                    item_id = int(item.split(" - ")[0])
+                    if id_num == item_id:
+                        self.listbox.selection_clear(0, tk.END)
+                        self.listbox.selection_set(i)
+                        break
+
+        except ValueError:
+            messagebox.showwarning(
+                "Input Error",
+                "Invalid format. Use '001-005' for range or '003' for single.",
+            )
+
+
+class WorkflowList(ctk.CTkScrollableFrame):
+    """Scrollable list of workflows with status and progress tracking."""
+
+    def __init__(self, parent, padding: int = 16):
+        self.min_height, self.max_height, self.row_height = 50, 300, 35
+        super().__init__(parent, height=self.min_height)
+
+        self.padding = padding
+        self.widgets = {}
+        self.pack(pady=padding, padx=padding, fill="x")
+
+    def add_workflow(self, name: str):
+        """Add a new workflow to the list."""
+        if name in self.widgets:
+            return
+
+        frame = ctk.CTkFrame(self)
+        frame.pack(pady=(0, self.padding // 2), fill="x")
+
+        check_var = ctk.BooleanVar()
+        check = ctk.CTkCheckBox(frame, text=name, variable=check_var)
+        check.pack(side="left", padx=self.padding)
+
+        progress = ctk.CTkProgressBar(frame, width=150)
+        progress.pack(side="left", padx=self.padding)
+        progress.set(0)
+
+        status = ctk.CTkLabel(frame, text="Ready")
+        status.pack(side="left", padx=self.padding)
+
+        delete_btn = ctk.CTkButton(
+            frame, text="Delete", width=80, command=lambda n=name: self._delete(n)
+        )
+        delete_btn.pack(side="right", padx=self.padding)
+
+        self.widgets[name] = {
+            "frame": frame,
+            "check": check,
+            "check_var": check_var,
+            "progress": progress,
+            "status": status,
+            "delete_btn": delete_btn,
+        }
+
+        self._update_height()
+
+    def _delete(self, name: str):
+        """Delete a workflow from the list."""
+        if name in self.widgets:
+            self.widgets[name]["frame"].destroy()
+            del self.widgets[name]
+            self._update_height()
+
+    def _update_height(self):
+        """Update the height of the frame based on content."""
+        num_workflows = len(self.widgets)
+        height = min(
+            self.max_height, max(self.min_height, num_workflows * self.row_height)
+        )
+        self.configure(height=height)
+
+    def get_selected(self) -> List[str]:
+        """Get the names of selected workflows."""
+        return [
+            name for name, widgets in self.widgets.items() if widgets["check_var"].get()
+        ]
+
+    def update_status(self, name: str, status: str):
+        """Update the status display for a workflow."""
+        if name in self.widgets:
+            self.widgets[name]["status"].configure(text=status)
+
+    def update_progress(self, name: str, value: float):
+        """Update the progress bar for a workflow."""
+        if name in self.widgets:
+            self.widgets[name]["progress"].set(value)
+
+    def reset(self):
+        """Reset all workflows."""
+        for widgets in self.widgets.values():
+            widgets["check_var"].set(False)
+            widgets["progress"].set(0)
+            widgets["status"].configure(text="Ready")
+
+
+class AutomationView(BaseView):
+    """
+    View for managing workflows and automation.
+    """
+
+    def __init__(self, parent, controllers: Dict[str, Any]):
+        """Initialize the automation view."""
+        super().__init__(parent, controllers)
+
+    def setup_ui(self):
+        """Set up the UI components."""
+        self.create_header("Automation")
+
+        # Create the workflow configuration section
+        config_frame = ctk.CTkFrame(self)
+        config_frame.pack(pady=self.padding, padx=self.padding, fill="x")
+
+        # Action configuration panel
+        self.action_config = ActionConfigPanel(config_frame)
+
+        # Account selector
+        self.account_selector = AccountSelector(config_frame)
+        self.account_selector.pack(side="left", fill="both", expand=True)
+
+        # Workflow save section
+        save_frame = ctk.CTkFrame(self)
+        save_frame.pack(pady=(0, self.padding), padx=self.padding, fill="x")
+
+        ctk.CTkLabel(save_frame, text="Workflow Name:").pack(
+            side="left", padx=(0, self.padding // 2)
+        )
+        self.workflow_name_entry = ctk.CTkEntry(save_frame, width=200)
+        self.workflow_name_entry.pack(side="left", padx=(0, self.padding // 2))
+
+        save_btn = ctk.CTkButton(
+            save_frame, text="Save Workflow", command=self._save_workflow
+        )
+        save_btn.pack(side="left")
+
+        # Workflow list
+        list_frame = ctk.CTkFrame(self)
+        list_frame.pack(pady=self.padding, padx=self.padding, fill="both", expand=True)
+
+        ctk.CTkLabel(
+            list_frame, text="Saved Workflows", font=("Segoe UI", 14, "bold")
+        ).pack(anchor="w", padx=self.padding, pady=(self.padding, 0))
+
+        self.workflow_list = WorkflowList(list_frame)
+
+        # Automation control
+        control_frame = ctk.CTkFrame(self)
+        control_frame.pack(pady=self.padding, padx=self.padding, fill="x")
+
+        ctk.CTkLabel(control_frame, text="Run Interval (seconds):").pack(
+            side="left", padx=(0, self.padding // 2)
+        )
+        self.interval_entry = ctk.CTkEntry(control_frame, width=80)
+        self.interval_entry.pack(side="left", padx=(0, self.padding // 2))
+        self.interval_entry.insert(0, "60")  # Default interval
+
+        self.randomize_var = ctk.BooleanVar(value=True)
+        ctk.CTkCheckBox(
+            control_frame, text="Randomize", variable=self.randomize_var
+        ).pack(side="left", padx=(0, self.padding))
+
+        self.start_btn = ctk.CTkButton(
+            control_frame, text="Start Automation", command=self._start_automation
+        )
+        self.start_btn.pack(side="left", padx=(0, self.padding // 2))
+
+        self.stop_btn = ctk.CTkButton(
+            control_frame, text="Stop", command=self._stop_automation, state="disabled"
+        )
+        self.stop_btn.pack(side="left")
+
+    def refresh(self):
+        """Refresh the view's content."""
+        try:
+            # Populate account selector
+            if "account" in self.controllers:
+                accounts = self.controllers["account"].get_all_accounts()
+                self.account_selector.set_accounts(accounts)
+
+            # Populate workflow list
+            if "automation" in self.controllers:
+                workflows = self.controllers["automation"].get_all_workflows()
+                if workflows:
+                    for name in workflows:
+                        self.workflow_list.add_workflow(name)
+        except Exception as e:
+            logger.error(f"Error refreshing automation view: {str(e)}")
+
+    def _save_workflow(self):
+        """Save the current workflow configuration."""
+        workflow_name = self.workflow_name_entry.get().strip()
+        if not workflow_name:
+            messagebox.showwarning("Input Error", "Please provide a workflow name.")
+            return
+
+        actions = self.action_config.get_selected_actions()
+        if not actions:
+            messagebox.showwarning("Input Error", "Please select at least one action.")
+            return
+
+        accounts = self.account_selector.get_selected_accounts()
+        if not accounts:
+            messagebox.showwarning("Input Error", "Please select at least one account.")
+            return
+
+        success = self.controllers["automation"].save_workflow(
+            workflow_name, actions, accounts
+        )
+
+        if success:
+            self.workflow_list.add_workflow(workflow_name)
+            self.workflow_name_entry.delete(0, tk.END)
+            self.action_config.reset()
+            messagebox.showinfo(
+                "Success", f"Workflow '{workflow_name}' saved successfully."
+            )
+        else:
+            messagebox.showerror("Error", f"Failed to save workflow '{workflow_name}'.")
+
+    def _start_automation(self):
+        """Start the automation process."""
+        selected_workflows = self.workflow_list.get_selected()
+        if not selected_workflows:
+            messagebox.showwarning(
+                "Warning", "Please select at least one workflow to run."
+            )
+            return
+
+        try:
+            interval = int(self.interval_entry.get())
+            if interval < 1:
+                raise ValueError("Interval must be at least 1 second.")
+        except ValueError as e:
+            messagebox.showwarning("Input Error", f"Invalid interval: {str(e)}")
+            return
+
+        randomize = self.randomize_var.get()
+
+        success = self.controllers["automation"].start_automation(
+            selected_workflows, interval, randomize
+        )
+
+        if success:
+            self.start_btn.configure(state="disabled")
+            self.stop_btn.configure(state="normal")
+            logger.info(f"Started automation with {len(selected_workflows)} workflows.")
+
+    def _stop_automation(self):
+        """Stop the automation process."""
+        if self.controllers["automation"].stop_automation():
+            self.start_btn.configure(state="normal")
+            self.stop_btn.configure(state="disabled")
+
+    def update_workflow_progress(self, workflow_name: str, progress: float):
+        """Update the progress display for a workflow."""
+        self.workflow_list.update_progress(workflow_name, progress)
+        if progress < 1.0:
+            status = f"Running ({int(progress * 100)}%)"
+        else:
+            status = "Complete"
+        self.workflow_list.update_status(workflow_name, status)
