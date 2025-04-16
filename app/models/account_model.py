@@ -50,13 +50,13 @@ class AccountModel:
         max_id = max(int(account_id) for account_id in self.accounts.keys())
         return max_id + 1
 
-    def add_account(self, user: str, password: str) -> Optional[str]:
+    def add_account(self, user: str, password: str) -> tuple[Optional[str], Optional[str]]:
         """Add a new account."""
         if not user or not password:
-            return None
+            return None, "Username and Password cannot be empty"
 
         if any(acc.get("user") == user for acc in self.accounts.values()):
-            return None
+            return None, f"Username {user} already exists"
 
         try:
             account_id = f"{self.next_id:03d}"
@@ -75,10 +75,10 @@ class AccountModel:
             }
             self.accounts[account_id] = account_data
             self.save_accounts()
-            return account_id
+            return account_id, None
         except Exception as e:
             print(f"Error adding account: {str(e)}")
-            return None
+            return None, f"Failed to add account: {str(e)}"
 
     def update_account(self, account_id: str, user: str, password: str) -> bool:
         """Update an existing account."""

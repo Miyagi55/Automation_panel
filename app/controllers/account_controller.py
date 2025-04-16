@@ -1,6 +1,3 @@
-"""
-Account controller to handle account operations.
-"""
 
 import asyncio
 import threading
@@ -9,8 +6,7 @@ from typing import Any, Callable, Dict, List, Optional
 from app.models.account_model import AccountModel
 from app.models.playwright.session_handler import SessionHandler
 from app.utils.logger import logger
-
-ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS = 300  # 5 minutes, edit as needed
+from app.utils.config import ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS   
 
 
 class AccountController:
@@ -24,23 +20,27 @@ class AccountController:
         self.session_handler = SessionHandler()
         self.update_ui_callback = update_ui_callback
 
-    def add_account(self, user: str, password: str) -> Optional[str]:
+
+
+    def add_account(self, user: str, password: str) -> tuple[Optional[str], Optional[str]]:
         """Add a new account."""
         if not user or not password:
             logger.warning("Username and password required")
-            return None
+            return None, "Username and password cannot be empty"
 
-        account_id = self.account_model.add_account(user, password)
+        account_id, error_message = self.account_model.add_account(user, password)
         if account_id:
             logger.info(
                 f"Added account: {user} (ID: {account_id}, Total: {len(self.account_model.accounts)})"
             )
             if self.update_ui_callback:
                 self.update_ui_callback()
-            return account_id
+            return account_id, None
         else:
             logger.warning(f"Failed to add account: {user}")
-            return None
+            return None, error_message or "Failed to add account"
+
+
 
     def update_account(self, account_id: str, user: str, password: str) -> bool:
         """Update an existing account."""
@@ -61,6 +61,8 @@ class AccountController:
         else:
             logger.warning(f"Failed to update account: {old_user}")
             return False
+
+
 
     def delete_account(self, account_id: str) -> bool:
         """Delete an account."""
@@ -83,13 +85,19 @@ class AccountController:
             logger.warning(f"Failed to delete account: {user}")
             return False
 
+
+
     def get_all_accounts(self) -> Dict[str, Dict[str, Any]]:
         """Get all accounts."""
         return self.account_model.get_all_accounts()
 
+
+
     def get_account(self, account_id: str) -> Optional[Dict[str, Any]]:
         """Get a single account."""
         return self.account_model.get_account(account_id)
+
+
 
     def update_account_status(
         self,
@@ -111,6 +119,8 @@ class AccountController:
             logger.warning(f"Failed to update status for account {account_id}")
             return False
 
+
+
     def import_accounts_from_file(self, file_path: str) -> int:
         """Import accounts from a file."""
         try:
@@ -129,6 +139,8 @@ class AccountController:
         except Exception as e:
             logger.error(f"Error importing accounts: {str(e)}")
             return 0
+
+
 
     def test_account(self, account_id: str) -> None:
         """Test a single account login."""
@@ -173,6 +185,8 @@ class AccountController:
         thread.daemon = True
         thread.start()
 
+
+
     def test_multiple_accounts(self, account_ids: List[str]) -> None:
         """Test multiple accounts in batches."""
         # Prepare account data for testing
@@ -190,6 +204,8 @@ class AccountController:
                         "password": account["password"],
                     }
                 )
+
+
 
         # Run tests in a separate thread
         def run_tests():
