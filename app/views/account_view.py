@@ -110,7 +110,7 @@ class AccountView(BaseView):
         )
         delete_btn.pack(side="left", padx=(0, self.padding // 2))
 
-        test_btn = ctk.CTkButton(button_frame, text="Test", command=self._test_account)
+        test_btn = ctk.CTkButton(button_frame, text="Run browser(s)", command=self._test_account)
         test_btn.pack(side="left")
 
     def refresh(self):
@@ -149,12 +149,15 @@ class AccountView(BaseView):
         user = self.user_entry.get()
         password = self.pw_entry.get()
 
-        account_id = self.controllers["account"].add_account(user, password)
+        account_id, error_message = self.controllers["account"].add_account(user, password)
 
         if account_id:
             self.user_entry.delete(0, tk.END)
             self.pw_entry.delete(0, tk.END)
             self.refresh()
+            messagebox.showinfo("Success", "Account addded sucessfully")
+        else:
+            messagebox.showerror("Error", error_message or "Failed to add account")
 
     def _edit_account(self):
         """Edit the selected account."""
