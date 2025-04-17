@@ -7,6 +7,7 @@ import random
 from typing import Any, Callable, Dict, List, Tuple
 
 from app.models.account_model import AccountModel
+from app.utils.config import URL
 
 from .browser_manager import BrowserManager
 
@@ -17,21 +18,14 @@ except ImportError:
     pass  # Will be handled during actual execution
 
 
-
-
-
 class SessionHandler:
     """
     Handles browser sessions and interactions.
     Manages authentication, navigation, and actions.
     """
 
-
     def __init__(self):
         self.browser_manager = BrowserManager()
-
-
-
 
     async def login_account(
         self,
@@ -66,7 +60,7 @@ class SessionHandler:
                 )
 
                 page = await browser.new_page()
-                await page.goto("https://www.facebook.com/login")
+                await page.goto(URL + "/login")
                 log_func(f"Navigated to Facebook login page for account {account_id}")
 
                 # Wait for login form to appear
@@ -140,9 +134,6 @@ class SessionHandler:
             log_func(f"Error during login for account {account_id}: {str(e)}")
             return False
 
-
-
-
     async def _type_with_human_delay(
         self, element, text: str, log_func: Callable[[str], None]
     ) -> None:
@@ -150,9 +141,6 @@ class SessionHandler:
         for char in text:
             await element.type(char, delay=0)
             await asyncio.sleep(random.uniform(0.05, 0.3))
-
-
-
 
     async def test_multiple_accounts(
         self,
@@ -172,9 +160,6 @@ class SessionHandler:
         # Limit concurrency
         semaphore = asyncio.Semaphore(concurrent_limit)
         results = {}
-
-
-
 
         async def test_account_with_semaphore(
             account: Dict[str, Any],
