@@ -1,8 +1,6 @@
-# app/utils/config.py
 from pathlib import Path
 
-
-#Configurable CONSTANTS
+# Configurable CONSTANTS
 ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS = 60  #  Edit as needed
 
 
@@ -15,8 +13,11 @@ def get_project_root() -> Path:
         current = current.parent
     raise RuntimeError("Could not find project root")
 
+
 ROOT = get_project_root()
 DATA_DIR = ROOT / "data"
 SESSIONS = DATA_DIR / "sessions"
 LOG_DIR = DATA_DIR / "logs"
 ACCOUNTS_FILE = DATA_DIR / "accounts.json"
+
+URL = "https://facebook.com"
