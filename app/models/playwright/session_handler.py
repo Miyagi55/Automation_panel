@@ -27,6 +27,9 @@ class SessionHandler:
     def __init__(self):
         self.browser_manager = BrowserManager()
 
+    async def load_browser(self, log_func: Callable[[str], None]) -> None:
+        pass  # TODO implement this method
+
     async def login_account(
         self,
         account_id: str,
