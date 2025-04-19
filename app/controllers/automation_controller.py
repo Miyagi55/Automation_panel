@@ -20,7 +20,7 @@ class WorkflowModel:
     Model for storing and retrieving workflow data.
     """
 
-    def __init__(self, workflows_file: str = "workflows.json"):
+    def __init__(self, workflows_file: str = "data/workflows.json"):
         self.workflows_file = workflows_file
         self.workflows = self.load_workflows()
 

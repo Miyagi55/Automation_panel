@@ -9,6 +9,11 @@ from app.utils.logger import logger
 from .base_view import BaseView
 
 
+
+
+
+#------------------------------------------class-----------------------------------------#
+
 class ActionConfigPanel(ctk.CTkFrame):
     """Panel for configuring actions for a workflow."""
 
@@ -80,10 +85,10 @@ class ActionConfigPanel(ctk.CTkFrame):
                         input_subframe,
                         text=text,
                         command=lambda a=action, cmd=command: cmd(a),
-                        height=30,  # Match checkbox and entry height
+                        height=30,  
                     )
                     button.pack(side="left", padx=(5, 0), pady=0)
-                    button.pack_forget()  # Initially hidden
+                    button.pack_forget()  
                     self.action_inputs[action].append(button)  # Store button
 
     def _toggle_input_visibility(self, action: str):
@@ -137,6 +142,12 @@ class ActionConfigPanel(ctk.CTkFrame):
             var.set(False)
             self._toggle_input_visibility(action)
 
+
+
+
+
+
+#------------------------------------------class-----------------------------------------#
 
 class AccountSelector(ctk.CTkFrame):
     """UI component for selecting accounts."""
@@ -257,6 +268,10 @@ class AccountSelector(ctk.CTkFrame):
             )
 
 
+
+
+#------------------------------------------class-----------------------------------------#
+
 class WorkflowList(ctk.CTkScrollableFrame):
     """Scrollable list of workflows with status and progress tracking."""
 
@@ -340,6 +355,10 @@ class WorkflowList(ctk.CTkScrollableFrame):
             widgets["status"].configure(text="Ready")
 
 
+
+
+
+#------------------------------------------class-----------------------------------------#
 class AutomationView(BaseView):
     """View for managing workflows and automation."""
 
