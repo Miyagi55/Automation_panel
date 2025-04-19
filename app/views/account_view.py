@@ -111,7 +111,9 @@ class AccountView(BaseView):
         delete_btn.pack(side="left", padx=(0, self.padding // 2))
 
         # Change button text
-        test_btn = ctk.CTkButton(button_frame, text="Open browser(s)", command=self._test_account)
+        test_btn = ctk.CTkButton(
+            button_frame, text="Open browser(s)", command=self._test_account
+        )
         test_btn.pack(side="left")
 
     def refresh(self):
@@ -150,7 +152,9 @@ class AccountView(BaseView):
         user = self.user_entry.get()
         password = self.pw_entry.get()
 
-        account_id, error_message = self.controllers["account"].add_account(user, password)
+        account_id, error_message = self.controllers["account"].add_account(
+            user, password
+        )
 
         if account_id:
             self.user_entry.delete(0, tk.END)
