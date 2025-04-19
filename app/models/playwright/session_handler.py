@@ -16,6 +16,7 @@ class SessionHandler:
     def __init__(self):
         self.browser_manager = BrowserManager()
         self._playwright = None  # shared Playwright instance
+        self.url = URL
 
     async def _ensure_playwright(self):
         """
@@ -84,6 +85,9 @@ class SessionHandler:
         )
         success = False
         try:
+            # open URL
+            page = await ctx.new_page()
+            await page.goto(self.url)
             await asyncio.sleep(keep_open_seconds)
             success = True
         except Exception as e:
