@@ -1,4 +1,3 @@
-
 import asyncio
 import threading
 from typing import Any, Callable, Dict, List, Optional
@@ -6,7 +5,7 @@ from typing import Any, Callable, Dict, List, Optional
 from app.models.account_model import AccountModel
 from app.models.playwright.session_handler import SessionHandler
 from app.utils.logger import logger
-from app.utils.config import ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS   
+from app.utils.config import ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS
 
 
 class AccountController:
@@ -143,7 +142,7 @@ class AccountController:
 
 
     def test_account(self, account_id: str) -> None:
-        """Test a single account login."""
+        """Test a single account by opening its browser context.""" # Corrected docstring
         account = self.account_model.get_account(account_id)
         if not account:
             logger.warning(f"Account not found: {account_id}")
@@ -158,25 +157,29 @@ class AccountController:
             asyncio.set_event_loop(loop)
 
             try:
+                # Call open_browser_context instead of login_account
                 result = loop.run_until_complete(
-                    self.session_handler.login_account(
+                    self.session_handler.open_browser_context(
                         account_id,
-                        account["user"],
-                        account["password"],
                         logger.info,
-                        keep_browser_open_seconds=ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS,
+                        ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS,
                     )
                 )
 
-                # Update account status based on result
+                # Update account status based on result (simplified for just opening)
                 if result:
                     self.update_account_status(
-                        account_id, "Logged In", "Available", "Successful login"
+                        account_id, "Browser Opened", "Available", "Browser session opened"
                     )
                 else:
                     self.update_account_status(
-                        account_id, "Login Failed", "Inactive", "Failed login attempt"
+                        account_id, "Open Failed", "Inactive", "Failed to open browser"
                     )
+            except Exception as e:
+                 logger.error(f"Error testing account {account_id}: {e}")
+                 self.update_account_status(
+                     account_id, "Error", "Inactive", f"Error: {e}"
+                 )
             finally:
                 loop.close()
 
@@ -188,7 +191,7 @@ class AccountController:
 
 
     def test_multiple_accounts(self, account_ids: List[str]) -> None:
-        """Test multiple accounts in batches."""
+        """Test multiple accounts by opening their browser contexts concurrently.""" # Corrected docstring
         # Prepare account data for testing
         accounts_to_test = []
         for account_id in account_ids:
@@ -200,10 +203,11 @@ class AccountController:
                 accounts_to_test.append(
                     {
                         "account_id": account_id,
-                        "user": account["user"],
-                        "password": account["password"],
+                        # No need for user/password for just opening browser
                     }
                 )
+            else:
+                 logger.warning(f"Account not found during multi-test prep: {account_id}")
 
 
 
@@ -213,25 +217,58 @@ class AccountController:
             asyncio.set_event_loop(loop)
 
             try:
-                results = loop.run_until_complete(
-                    self.session_handler.test_multiple_accounts(
-                        accounts_to_test, logger.info
+                # Use asyncio.gather to run open_browser_context concurrently
+                tasks = [
+                    self.session_handler.open_browser_context(
+                        a["account_id"],
+                        logger.info,
+                        ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS,
                     )
-                )
+                    for a in accounts_to_test
+                ]
+                # Added return_exceptions=True to handle individual task failures
+                results = loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
+
 
                 # Update account statuses based on results
-                for account_id, success in results.items():
-                    if success:
-                        self.update_account_status(
-                            account_id, "Logged In", "Available", "Successful login"
-                        )
+                for i, result in enumerate(results):
+                    # Ensure index is within bounds
+                    if i < len(accounts_to_test):
+                        account_id = accounts_to_test[i]["account_id"]
+                        if isinstance(result, Exception):
+                            logger.error(f"Error opening browser for {account_id}: {result}")
+                            self.update_account_status(
+                                account_id,
+                                "Open Failed",
+                                "Inactive",
+                                f"Failed to open browser: {result}",
+                            )
+                        elif result: # result is True if successful
+                            self.update_account_status(
+                                account_id, "Browser Opened", "Available", "Browser session opened"
+                            )
+                        else: # result is False
+                             self.update_account_status(
+                                account_id,
+                                "Open Failed",
+                                "Inactive",
+                                "Failed to open browser",
+                            )
                     else:
-                        self.update_account_status(
-                            account_id,
-                            "Login Failed",
-                            "Inactive",
-                            "Failed login attempt",
-                        )
+                        logger.error(f"Result index {i} out of bounds for accounts_to_test (length {len(accounts_to_test)})")
+
+
+            except Exception as e:
+                 logger.error(f"Error during multi-account test execution: {e}")
+                 # Potentially update all tested accounts to an error state
+                 for acc in accounts_to_test:
+                     # Check if account_id exists before updating status
+                     if "account_id" in acc:
+                         self.update_account_status(
+                             acc["account_id"], "Error", "Inactive", f"Multi-test error: {e}"
+                         )
+                     else:
+                         logger.error(f"Missing 'account_id' in account data during error handling: {acc}")
             finally:
                 loop.close()
 

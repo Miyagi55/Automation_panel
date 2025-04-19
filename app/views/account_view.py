@@ -110,7 +110,8 @@ class AccountView(BaseView):
         )
         delete_btn.pack(side="left", padx=(0, self.padding // 2))
 
-        test_btn = ctk.CTkButton(button_frame, text="Run browser(s)", command=self._test_account)
+        # Change button text
+        test_btn = ctk.CTkButton(button_frame, text="Open browser(s)", command=self._test_account)
         test_btn.pack(side="left")
 
     def refresh(self):
