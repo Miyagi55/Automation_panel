@@ -275,15 +275,15 @@ class AccountSelector(ctk.CTkFrame):
 class WorkflowList(ctk.CTkScrollableFrame):
     """Scrollable list of workflows with status and progress tracking."""
 
-    def __init__(self, parent, padding: int = 16):
+    def __init__(self, parent, controllers, padding: int = 16):
         self.min_height, self.max_height, self.row_height = 50, 300, 35
         super().__init__(parent, height=self.min_height)
+        self.controllers = controllers  # Store controllers reference
         self.padding = padding
         self.widgets = {}
         self.pack(pady=padding, padx=padding, fill="x")
 
     def add_workflow(self, name: str):
-        
         if name in self.widgets:
             return
 
@@ -302,7 +302,7 @@ class WorkflowList(ctk.CTkScrollableFrame):
         status.pack(side="left", padx=self.padding)
 
         delete_btn = ctk.CTkButton(
-            frame, text="Delete", width=80, command=lambda n=name: self._delete(n)
+            frame, text="Delete_test", width=80, command=lambda n=name: self._delete(n)
         )
         delete_btn.pack(side="right", padx=self.padding)
 
@@ -317,14 +317,25 @@ class WorkflowList(ctk.CTkScrollableFrame):
         self._update_height()
 
     def _delete(self, name: str):
-        
+        """Delete a workflow after user confirmation."""
         if name in self.widgets:
-            self.widgets[name]["frame"].destroy()
-            del self.widgets[name]
-            self._update_height()
+            # Show confirmation dialog
+            if messagebox.askyesno(
+                "Confirm Deletion",
+                f"Are you sure you want to delete the workflow '{name}'?",
+            ):
+                # Call the controller to delete the workflow from the model (and JSON file)
+                success = self.controllers["automation"].delete_workflow(name)
+                if success:
+                    # Remove from UI
+                    self.widgets[name]["frame"].destroy()
+                    del self.widgets[name]
+                    self._update_height()
+                    messagebox.showinfo("Success", f"Workflow '{name}' deleted successfully.")
+                else:
+                    messagebox.showerror("Error", f"Failed to delete workflow '{name}'.")
 
     def _update_height(self):
-        
         num_workflows = len(self.widgets)
         height = min(
             self.max_height, max(self.min_height, num_workflows * self.row_height)
@@ -332,23 +343,19 @@ class WorkflowList(ctk.CTkScrollableFrame):
         self.configure(height=height)
 
     def get_selected(self) -> List[str]:
-        
         return [
             name for name, widgets in self.widgets.items() if widgets["check_var"].get()
         ]
 
     def update_status(self, name: str, status: str):
-        
         if name in self.widgets:
             self.widgets[name]["status"].configure(text=status)
 
     def update_progress(self, name: str, value: float):
-        
         if name in self.widgets:
             self.widgets[name]["progress"].set(value)
 
     def reset(self):
-        
         for widgets in self.widgets.values():
             widgets["check_var"].set(False)
             widgets["progress"].set(0)
@@ -415,7 +422,7 @@ class AutomationView(BaseView):
             list_frame, text="Saved Workflows", font=("Segoe UI", 14, "bold")
         ).pack(anchor="w", padx=self.padding, pady=(0, self.padding // 2))
 
-        self.workflow_list = WorkflowList(list_frame)
+        self.workflow_list = WorkflowList(list_frame, self.controllers)
 
     def refresh(self):
         """Refresh the view's content."""

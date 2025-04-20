@@ -19,24 +19,17 @@ class AccountView(BaseView):
     """
 
     def __init__(self, parent, controllers: Dict[str, Any]):
-        """Initialize the account view."""
+        
         super().__init__(parent, controllers)
 
     def setup_ui(self):
-        """Set up the UI components."""
+        
         self.create_header("Account Management")
 
         # Account entry form
         self._setup_entry_form()
-
-        # Import button
-        import_btn = self.create_button("Import from .txt", self._import_accounts)
-        import_btn.pack(pady=self.padding // 2, padx=self.padding)
-
-        # Accounts table
+       
         self._setup_accounts_table()
-
-        # Action buttons
         self._setup_action_buttons()
 
     def _setup_entry_form(self):
@@ -56,6 +49,11 @@ class AccountView(BaseView):
 
         add_btn = ctk.CTkButton(add_frame, text="Add", command=self._add_account)
         add_btn.pack(side="left")
+
+        import_btn = self.create_button("Import from .txt", self._import_accounts)
+        import_btn.pack(padx=(0, self.padding // 2), fill='x')
+
+        
 
     def _setup_accounts_table(self):
         """Set up the accounts table."""
@@ -77,19 +75,19 @@ class AccountView(BaseView):
             pady=self.padding, padx=self.padding, fill="both", expand=True
         )
 
-        self.accounts_tree.heading("ID", text="ID")
-        self.accounts_tree.heading("Username", text="Username")
-        self.accounts_tree.heading("Password", text="Password")
-        self.accounts_tree.heading("Activity", text="Activity")
-        self.accounts_tree.heading("Status", text="Status")
-        self.accounts_tree.heading("Last activity", text="Last Activity")
+        columns = {
+            "ID": {"text": "ID", "width": 50},
+            "Username": {"text": "Username", "width": 150},
+            "Password": {"text": "Password", "width": 100},
+            "Activity": {"text": "Activity", "width": 100},
+            "Status": {"text": "Status", "width": 80},
+            "Last activity": {"text": "Last Activity", "width": 120}
+        }
 
-        self.accounts_tree.column("ID", width=50)
-        self.accounts_tree.column("Username", width=150)
-        self.accounts_tree.column("Password", width=100)
-        self.accounts_tree.column("Activity", width=100)
-        self.accounts_tree.column("Status", width=80)
-        self.accounts_tree.column("Last activity", width=120)
+        # Set headings and column widths
+        for col, config in columns.items():
+            self.accounts_tree.heading(col, text=config["text"])
+            self.accounts_tree.column(col, width=config["width"])
 
         scrollbar = ttk.Scrollbar(
             self, orient="vertical", command=self.accounts_tree.yview
@@ -110,15 +108,20 @@ class AccountView(BaseView):
         )
         delete_btn.pack(side="left", padx=(0, self.padding // 2))
 
-        test_btn = ctk.CTkButton(button_frame, text="Run browser(s)", command=self._test_account)
-        test_btn.pack(side="left")
+        run_browser_btn = ctk.CTkButton(button_frame, text="Run browser(s)", command=self._test_account)
+        run_browser_btn.pack(side="left")
+
+        auto_login_btn = ctk.CTkButton(button_frame, text="Auto login", command=self._test_account)
+        auto_login_btn.pack(side='right')
+
+        
 
     def refresh(self):
         """Refresh the accounts table."""
-        # Clear existing items
+        
         self.accounts_tree.delete(*self.accounts_tree.get_children())
 
-        # Get accounts from controller
+        
         accounts = self.controllers["account"].get_all_accounts()
 
         # If accounts is None or empty, just return
@@ -145,7 +148,7 @@ class AccountView(BaseView):
                 logger.error(f"Error adding account {account_id} to view: {str(e)}")
 
     def _add_account(self):
-        """Add a new account."""
+       
         user = self.user_entry.get()
         password = self.pw_entry.get()
 
@@ -160,7 +163,7 @@ class AccountView(BaseView):
             messagebox.showerror("Error", error_message or "Failed to add account")
 
     def _edit_account(self):
-        """Edit the selected account."""
+        
         selected = self.accounts_tree.selection()
         if not selected:
             messagebox.showwarning("Warning", "Please select an account to edit")
@@ -202,7 +205,7 @@ class AccountView(BaseView):
         save_btn.grid(row=2, column=0, columnspan=2, pady=10)
 
     def _delete_account(self):
-        """Delete the selected account(s)."""
+        
         selected = self.accounts_tree.selection()
         if not selected:
             messagebox.showwarning("Warning", "Please select an account to delete")
@@ -216,7 +219,7 @@ class AccountView(BaseView):
             self.refresh()
 
     def _test_account(self):
-        """Test the selected account(s)."""
+        
         selected = self.accounts_tree.selection()
         if not selected:
             messagebox.showwarning(
@@ -225,10 +228,10 @@ class AccountView(BaseView):
             return
 
         if len(selected) == 1:
-            # Test a single account
+            
             self.controllers["account"].test_account(selected[0])
         else:
-            # Test multiple accounts
+            
             self.controllers["account"].test_multiple_accounts(list(selected))
 
         # Update status immediately
@@ -246,7 +249,7 @@ class AccountView(BaseView):
             )
 
     def _import_accounts(self):
-        """Import accounts from a text file."""
+        
         file_path = filedialog.askopenfilename(filetypes=[("Text files", "*.txt")])
         if file_path:
             count = self.controllers["account"].import_accounts_from_file(file_path)
