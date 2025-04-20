@@ -10,11 +10,8 @@ from app.models.account_model import AccountModel
 
 from .browser_manager import BrowserManager
 
-# Optional import to prevent immediate errors if package not installed
-try:
-    from patchright.async_api import async_playwright
-except ImportError:
-    pass  # Will be handled during actual execution
+from patchright.async_api import async_playwright
+
 
 
 
@@ -29,9 +26,6 @@ class SessionHandler:
 
     def __init__(self):
         self.browser_manager = BrowserManager()
-
-
-
 
     async def login_account(
         self,
@@ -146,7 +140,7 @@ class SessionHandler:
     async def _type_with_human_delay(
         self, element, text: str, log_func: Callable[[str], None]
     ) -> None:
-        """Type text with random delays between keystrokes to mimic human typing."""
+        
         for char in text:
             await element.type(char, delay=0)
             await asyncio.sleep(random.uniform(0.05, 0.3))
@@ -162,7 +156,7 @@ class SessionHandler:
         concurrent_limit: int = 9,
     ) -> Dict[str, bool]:
         """
-        Test multiple accounts concurrently, with configurable batch size and concurrency.
+        Test multiple accounts, with configurable batch size and concurrency.
         """
         chromium_exe = self.browser_manager.get_chromium_executable(log_func)
         if not chromium_exe:

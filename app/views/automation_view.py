@@ -123,7 +123,7 @@ class ActionConfigPanel(ctk.CTkFrame):
         return actions
 
     def _get_action_details(self, action: str) -> dict:
-        """Extract action details based on action type."""
+        
         entry = self.action_inputs[action][0]
         if action == "Comments":
             file_path = self.action_inputs[action][2] if len(self.action_inputs[action]) > 2 else None
@@ -137,7 +137,7 @@ class ActionConfigPanel(ctk.CTkFrame):
             return {"content": entry.get()}
 
     def reset(self):
-        """Reset all action configurations."""
+        
         for action, var in self.action_vars.items():
             var.set(False)
             self._toggle_input_visibility(action)
@@ -159,7 +159,7 @@ class AccountSelector(ctk.CTkFrame):
         self._setup_ui()
 
     def _setup_ui(self):
-        """Set up the account selection user interface."""
+        
         title = ctk.CTkLabel(
             self, text="Select Accounts:", font=("Segoe UI", 12, "bold")
         )
@@ -212,7 +212,7 @@ class AccountSelector(ctk.CTkFrame):
         save_btn.pack(side="left")
 
     def set_accounts(self, accounts: Dict[str, Dict[str, Any]]):
-        """Set the accounts to display in the listbox."""
+        
         self.listbox.delete(0, tk.END)
 
         if not accounts:
@@ -229,7 +229,7 @@ class AccountSelector(ctk.CTkFrame):
                 )
 
     def get_selected_accounts(self) -> List[str]:
-        """Get the emails of selected accounts."""
+        
         selected_indices = self.listbox.curselection()
         if not selected_indices:
             return []
@@ -283,7 +283,7 @@ class WorkflowList(ctk.CTkScrollableFrame):
         self.pack(pady=padding, padx=padding, fill="x")
 
     def add_workflow(self, name: str):
-        """Add a new workflow to the list."""
+        
         if name in self.widgets:
             return
 
@@ -317,14 +317,14 @@ class WorkflowList(ctk.CTkScrollableFrame):
         self._update_height()
 
     def _delete(self, name: str):
-        """Delete a workflow from the list."""
+        
         if name in self.widgets:
             self.widgets[name]["frame"].destroy()
             del self.widgets[name]
             self._update_height()
 
     def _update_height(self):
-        """Update the height of the frame based on content."""
+        
         num_workflows = len(self.widgets)
         height = min(
             self.max_height, max(self.min_height, num_workflows * self.row_height)
@@ -332,23 +332,23 @@ class WorkflowList(ctk.CTkScrollableFrame):
         self.configure(height=height)
 
     def get_selected(self) -> List[str]:
-        """Get the names of selected workflows."""
+        
         return [
             name for name, widgets in self.widgets.items() if widgets["check_var"].get()
         ]
 
     def update_status(self, name: str, status: str):
-        """Update the status display for a workflow."""
+        
         if name in self.widgets:
             self.widgets[name]["status"].configure(text=status)
 
     def update_progress(self, name: str, value: float):
-        """Update the progress bar for a workflow."""
+        
         if name in self.widgets:
             self.widgets[name]["progress"].set(value)
 
     def reset(self):
-        """Reset all workflows."""
+        
         for widgets in self.widgets.values():
             widgets["check_var"].set(False)
             widgets["progress"].set(0)
@@ -363,11 +363,10 @@ class AutomationView(BaseView):
     """View for managing workflows and automation."""
 
     def __init__(self, parent, controllers: Dict[str, Any]):
-        """Initialize the automation view."""
         super().__init__(parent, controllers)
 
     def setup_ui(self):
-        """Set up the UI components."""
+        
         self.create_header("Automation")
 
         # Create the workflow configuration section (top section)
@@ -434,7 +433,7 @@ class AutomationView(BaseView):
             logger.error(f"Error refreshing automation view: {str(e)}")
 
     def _save_workflow(self):
-        """Save the current workflow configuration."""
+        
         workflow_name = self.account_selector.workflow_name_entry.get().strip()
         if not workflow_name:
             messagebox.showwarning("Input Error", "Please provide a workflow name.")
@@ -465,7 +464,7 @@ class AutomationView(BaseView):
             messagebox.showerror("Error", f"Failed to save workflow '{workflow_name}'.")
 
     def _start_automation(self):
-        """Start the automation process."""
+        
         selected_workflows = self.workflow_list.get_selected()
         if not selected_workflows:
             messagebox.showwarning(
@@ -492,13 +491,13 @@ class AutomationView(BaseView):
             logger.info(f"Started automation with {len(selected_workflows)} workflows.")
 
     def _stop_automation(self):
-        """Stop the automation process."""
+        
         if self.controllers["automation"].stop_automation():
             self.start_btn.configure(state="normal")
             self.stop_btn.configure(state="disabled")
 
     def update_workflow_progress(self, workflow_name: str, progress: float):
-        """Update the progress display for a workflow."""
+        
         self.workflow_list.update_progress(workflow_name, progress)
         if progress < 1.0:
             status = f"Running ({int(progress * 100)}%)"
