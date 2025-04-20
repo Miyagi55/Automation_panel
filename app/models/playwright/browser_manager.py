@@ -10,6 +10,8 @@ from typing import Callable, Optional
 from app.utils.config import ROOT, SESSIONS
 
 
+
+
 class BrowserManager:
     """
     Manages browser automation using Playwright.
@@ -20,6 +22,8 @@ class BrowserManager:
     _webdriver_path = None
     _sessions_base_dir = str(SESSIONS)
 
+
+
     def __new__(cls):
         """Singleton pattern to ensure only one browser manager exists."""
         if cls._instance is None:
@@ -28,6 +32,8 @@ class BrowserManager:
             # Ensure the sessions base directory exists
             os.makedirs(cls._sessions_base_dir, exist_ok=True)
         return cls._instance
+
+
 
     def _initialize_path(self, log_func: Callable[[str], None]) -> None:
         """Set webdriver path if it exists."""
@@ -42,6 +48,8 @@ class BrowserManager:
         if chromium_dir and self._verify_chromium_executable(chromium_dir, log_func):
             self._webdriver_path = path
             log_func(f"Webdriver path initialized: {self._webdriver_path}")
+
+
 
     def _find_chromium_dir(
         self, base_path: str, log_func: Callable[[str], None]
@@ -58,6 +66,8 @@ class BrowserManager:
             log_func(f"Error finding Chromium directory: {str(e)}")
             return None
 
+
+
     def _verify_chromium_executable(
         self, chromium_dir: str, log_func: Callable[[str], None]
     ) -> bool:
@@ -68,10 +78,14 @@ class BrowserManager:
             log_func(f"Chromium executable not found at: {chromium_path}")
         return exists
 
+
+
     @property
     def webdriver_path(self) -> Optional[str]:
         """Get the current webdriver path."""
         return self._webdriver_path
+
+
 
     def install_webdrivers(
         self,
@@ -113,6 +127,8 @@ class BrowserManager:
         log_func(f"Webdrivers installed at: {self._webdriver_path}")
         return True
 
+
+
     def _run_playwright_install(self, log_func: Callable[[str], None]) -> bool:
         """Run the playwright install command."""
         try:
@@ -128,17 +144,23 @@ class BrowserManager:
             log_func(f"Installation failed: {e.stderr}")
             return False
 
+
+
     def _simulate_progress(self, update_progress: Callable[[str, float], None]) -> None:
         """Simulate download progress for the UI."""
         for i in range(1, 10):
             time.sleep(0.5)
             update_progress("Downloading...", 0.1 + i * 0.09)
 
+
+
     def get_session_dir(self, account_id: str) -> str:
         """Get the session directory for a given account ID."""
         session_dir = os.path.join(self._sessions_base_dir, f"session_{account_id}")
         os.makedirs(session_dir, exist_ok=True)
         return session_dir
+
+
 
     def get_chromium_executable(self, log_func: Callable[[str], None]) -> Optional[str]:
         """Get the path to the Chromium executable."""

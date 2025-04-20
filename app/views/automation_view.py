@@ -391,7 +391,7 @@ class AutomationView(BaseView):
         list_frame = ctk.CTkFrame(self)
         list_frame.pack(pady=(0, self.padding), padx=self.padding, fill="both", expand=True)
 
-        # Automation control (header for workflow list)
+        # Automation control 
         control_frame = ctk.CTkFrame(list_frame)
         control_frame.pack(pady=(0, self.padding // 2), fill="x")
 
