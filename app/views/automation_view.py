@@ -302,7 +302,7 @@ class WorkflowList(ctk.CTkScrollableFrame):
         status.pack(side="left", padx=self.padding)
 
         delete_btn = ctk.CTkButton(
-            frame, text="Delete_test", width=80, command=lambda n=name: self._delete(n)
+            frame, text="Delete", width=80, command=lambda n=name: self._delete(n)
         )
         delete_btn.pack(side="right", padx=self.padding)
 

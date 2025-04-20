@@ -217,7 +217,10 @@ class AccountView(BaseView):
             for account_id in selected:
                 self.controllers["account"].delete_account(account_id)
             self.refresh()
+    
 
+
+    ##------------------------------test_account(s)-------------------°°°°!!!!!!!!!
     def _test_account(self):
         
         selected = self.accounts_tree.selection()

@@ -205,8 +205,6 @@ class AccountController:
                     }
                 )
 
-
-
         # Run tests in a separate thread
         def run_tests():
             loop = asyncio.new_event_loop()
