@@ -1,6 +1,3 @@
-"""
-Account model to manage Facebook accounts data.
-"""
 
 import json
 import os

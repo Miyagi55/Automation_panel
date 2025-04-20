@@ -128,12 +128,25 @@ class AccountController:
                 count = 0
                 for line in f:
                     try:
-                        user, password = line.strip().split(",")
+                        # Strip whitespace from the line
+                        line = line.strip()
+                        # Check for either ':' or ',' as separator
+                        if ':' in line:
+                            user, password = line.split(':')
+                        elif ',' in line:
+                            user, password = line.split(',')
+                        else:
+                            logger.warning(f"Invalid line in import file: {line}")
+                            continue
+                        # Strip whitespace from user and password
+                        user = user.strip()
+                        password = password.strip()
+                        # Add account and increment count if successful
                         account_id = self.add_account(user, password)
                         if account_id:
                             count += 1
                     except ValueError:
-                        logger.warning(f"Invalid line in import file: {line.strip()}")
+                        logger.warning(f"Invalid line in import file: {line}")
                 logger.info(f"Imported {count} accounts from {file_path}")
                 return count
         except Exception as e:
