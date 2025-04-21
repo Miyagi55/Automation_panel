@@ -2,6 +2,9 @@ from pathlib import Path
 
 # Configurable CONSTANTS
 ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS = 60  #  Edit as needed
+HEADLESS_MODE = (
+    False  # Set to True for headless browser operation (server/CI environments)
+)
 
 
 def get_project_root() -> Path:
@@ -21,3 +24,5 @@ LOG_DIR = DATA_DIR / "logs"
 ACCOUNTS_FILE = DATA_DIR / "accounts.json"
 
 URL = "https://facebook.com"
+
+MAX_INSTANCES = 5  # Maximum number of browser instances to run in parallel
