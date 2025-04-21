@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 #Configurable CONSTANTS
-ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS = 60  #  Edit as needed
+ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS = 15  #  Edit as needed
 LINK_LOGIN = "https://www.facebook.com/login"
 
 def get_project_root() -> Path:

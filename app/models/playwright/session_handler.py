@@ -266,6 +266,7 @@ class SessionHandler:
             log_func(f"Attempting to open session for account {account_id}")
             user_data_dir = self.browser_manager.get_session_dir(account_id)
 
+            
             # Check if session directory exists
             if not self.browser_manager.get_session_dir(account_id):
                 log_func(f"No session directory found for account {account_id} at {user_data_dir}")
@@ -274,12 +275,14 @@ class SessionHandler:
 
             # Create browser context
             browser = await self.browser_context.create_browser_context(account_id, log_func)
+            await self.cookie_manager.save_cookies(browser, account_id, log_func)
             if not browser:
                 log_func(f"Failed to create browser context for account {account_id}")
                 results[account_id] = False
                 continue
 
             try:
+        
                 # Open a new page and navigate to Facebook home URL
                 page = await browser.new_page()
                 await page.goto(home_url)
