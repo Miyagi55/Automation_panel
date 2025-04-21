@@ -54,7 +54,16 @@ class AccountView(BaseView):
         import_btn.pack(padx=(0, self.padding // 2), fill='x')
 
         
-
+    def _import_accounts(self):
+        
+        file_path = filedialog.askopenfilename(filetypes=[("Text files", "*.txt")])
+        if file_path:
+            count = self.controllers["account"].import_accounts_from_file(file_path)
+            messagebox.showinfo(
+                "Import Accounts", f"Successfully imported {count} accounts"
+            )
+            self.refresh()
+            
     def _setup_accounts_table(self):
         """Set up the accounts table."""
         self.accounts_tree = ttk.Treeview(
@@ -108,12 +117,17 @@ class AccountView(BaseView):
         )
         delete_btn.pack(side="left", padx=(0, self.padding // 2))
 
-        run_browser_btn = ctk.CTkButton(button_frame, text="Run browser(s)", command=self._test_account)
+
+        #browser_btn_text =  "Run browser(s)"
+        run_browser_btn = ctk.CTkButton(button_frame, text="Run browser(s)", command=self._run_browser)
         run_browser_btn.pack(side="left")
 
-        auto_login_btn = ctk.CTkButton(button_frame, text="Auto login", command=self._test_account)
+        
+        #login_btn_text = "Auto login"
+        auto_login_btn = ctk.CTkButton(button_frame, text="Auto login", command=self.auto_login_accounts)
         auto_login_btn.pack(side='right')
-
+        
+    
         
 
     def refresh(self):
@@ -219,9 +233,9 @@ class AccountView(BaseView):
             self.refresh()
     
 
-
+    ## Repeated code! TODO: Refactor run_browser and auto_login_accounts methods for code reusability 
     ##------------------------------test_account(s)-------------------°°°°!!!!!!!!!
-    def _test_account(self):
+    def _run_browser(self):
         
         selected = self.accounts_tree.selection()
         if not selected:
@@ -229,13 +243,32 @@ class AccountView(BaseView):
                 "Warning", "Please select at least one account to test"
             )
             return
-
-        if len(selected) == 1:
+    
+        self.controllers["account"].run_browser(selected)
+        
+        # Update status immediately
+        for account_id in selected:
+            self.accounts_tree.item(
+                account_id,
+                values=(
+                    account_id,
+                    self.accounts_tree.item(account_id)["values"][1],  # Username
+                    self.accounts_tree.item(account_id)["values"][2],  # Password
+                    "Testing",
+                    "Testing",
+                    "",
+                ),
+            )
+    def auto_login_accounts(self):
+        
+        selected = self.accounts_tree.selection()
+        if not selected:
+            messagebox.showwarning(
+                "Warning", "Please select at least one account to test"
+            )
+            return
             
-            self.controllers["account"].test_account(selected[0])
-        else:
-            
-            self.controllers["account"].test_multiple_accounts(list(selected))
+        self.controllers["account"].auto_login_accounts(list(selected))
 
         # Update status immediately
         for account_id in selected:
@@ -251,12 +284,4 @@ class AccountView(BaseView):
                 ),
             )
 
-    def _import_accounts(self):
-        
-        file_path = filedialog.askopenfilename(filetypes=[("Text files", "*.txt")])
-        if file_path:
-            count = self.controllers["account"].import_accounts_from_file(file_path)
-            messagebox.showinfo(
-                "Import Accounts", f"Successfully imported {count} accounts"
-            )
-            self.refresh()
+    

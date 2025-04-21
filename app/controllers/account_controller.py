@@ -155,52 +155,62 @@ class AccountController:
 
 
 
-    def test_account(self, account_id: str) -> None:
+    def run_browser(self, account_ids: List[str]) -> None:
         """Test a single account login."""
-        account = self.account_model.get_account(account_id)
-        if not account:
-            logger.warning(f"Account not found: {account_id}")
-            return
+        accounts_to_test = []
+        for account_id in account_ids:
+            account = self.account_model.get_account(account_id)
+            if account:
+                # Update account status to indicate testing
+                self.update_account_status(account_id, "Testing")
 
-        # Update account status to indicate testing
-        self.update_account_status(account_id, "Testing")
+                accounts_to_test.append(
+                    {
+                        "account_id": account_id,
+                        "user": account["user"],
+                        "password": account["password"],
+                    }
+                )
 
-        # Run the test in a separate thread
-        def run_test():
+        account_id_list = [account["account_id"] for account in accounts_to_test]
+        # Run tests in a separate thread
+        def run_tests():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
             try:
-                result = loop.run_until_complete(
-                    self.session_handler.login_account(
-                        account_id,
-                        account["user"],
-                        account["password"],
+                results = loop.run_until_complete(
+                    self.session_handler.open_sessions( 
+                        account_id_list, 
                         logger.info,
-                        keep_browser_open_seconds=ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS,
+                        keep_browser_open_seconds=ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS
                     )
                 )
 
-                # Update account status based on result
-                if result:
-                    self.update_account_status(
-                        account_id, "Logged In", "Available", "Successful login"
-                    )
-                else:
-                    self.update_account_status(
-                        account_id, "Login Failed", "Inactive", "Failed login attempt"
-                    )
+                # Update account statuses based on results
+                for account_id, success in results.items():
+                    if success:
+                        self.update_account_status(
+                            account_id, "Logged In", "Available", "Successful login"
+                        )
+                    else:
+                        self.update_account_status(
+                            account_id,
+                            "Login Failed",
+                            "Inactive",
+                            "Failed login attempt",
+                        )
             finally:
                 loop.close()
 
-        # Start the test thread
-        thread = threading.Thread(target=run_test)
+        # Start the tests thread
+        thread = threading.Thread(target=run_tests)
         thread.daemon = True
         thread.start()
 
 
 
-    def test_multiple_accounts(self, account_ids: List[str]) -> None:
+    def auto_login_accounts(self, account_ids: List[str]) -> None:
         """Test multiple accounts in batches."""
         # Prepare account data for testing
         accounts_to_test = []
@@ -225,7 +235,7 @@ class AccountController:
 
             try:
                 results = loop.run_until_complete(
-                    self.session_handler.test_multiple_accounts(
+                    self.session_handler.auto_login_accounts(
                         accounts_to_test, logger.info
                     )
                 )

@@ -139,7 +139,7 @@ class BatchProcessor:
     def __init__(self, session_handler):
         self.session_handler = session_handler
 
-    async def test_multiple_accounts(
+    async def auto_login_accounts(
         self,
         accounts: List[Dict[str, Any]],
         log_func: Callable[[str], None],
@@ -234,7 +234,7 @@ class SessionHandler:
         finally:
             await browser.close()
 
-    async def test_multiple_accounts(
+    async def auto_login_accounts(
         self,
         accounts: List[Dict[str, Any]],
         log_func: Callable[[str], None],
@@ -244,4 +244,68 @@ class SessionHandler:
         """
         Test multiple accounts, with configurable batch size and concurrency.
         """
-        return await self.batch_processor.test_multiple_accounts(accounts, log_func, batch_size, concurrent_limit)
+        return await self.batch_processor.auto_login_accounts(accounts, log_func, batch_size, concurrent_limit)
+    
+
+
+    async def open_sessions(
+        self,
+        account_ids: str | List[str],
+        log_func: Callable[[str], None],
+        keep_browser_open_seconds: int,
+    ) -> Dict[str, bool]: 
+
+        # Normalize input to a list
+        if isinstance(account_ids, str):
+            account_ids = [account_ids]
+        
+        results = {}
+        home_url = "https://www.facebook.com/home"
+
+        for account_id in account_ids:
+            log_func(f"Attempting to open session for account {account_id}")
+            user_data_dir = self.browser_manager.get_session_dir(account_id)
+
+            # Check if session directory exists
+            if not self.browser_manager.get_session_dir(account_id):
+                log_func(f"No session directory found for account {account_id} at {user_data_dir}")
+                results[account_id] = False
+                continue
+
+            # Create browser context
+            browser = await self.browser_context.create_browser_context(account_id, log_func)
+            if not browser:
+                log_func(f"Failed to create browser context for account {account_id}")
+                results[account_id] = False
+                continue
+
+            try:
+                # Open a new page and navigate to Facebook home URL
+                page = await browser.new_page()
+                await page.goto(home_url)
+                log_func(f"Navigated to {home_url} for account {account_id}")
+
+                # Verify navigation success (basic check: page loaded and URL is correct)
+                current_url = page.url
+                navigation_successful = home_url in current_url and "login" not in current_url
+                if navigation_successful:
+                    log_func(f"Successfully opened session for account {account_id}")
+                else:
+                    log_func(f"Failed to verify navigation for account {account_id}. Current URL: {current_url}")
+                    #await page.screenshot(path=f"{user_data_dir}/navigation_failed.png")
+
+                # Keep browser open if requested
+                if keep_browser_open_seconds > 0:
+                    log_func(f"Keeping browser open for {keep_browser_open_seconds} seconds for account {account_id}")
+                    await asyncio.sleep(keep_browser_open_seconds)
+
+                results[account_id] = navigation_successful
+
+            except Exception as e:
+                log_func(f"Error opening session for account {account_id}: {str(e)}")
+                results[account_id] = False
+            finally:
+                await browser.close()
+                log_func(f"Closed browser for account {account_id}")
+
+        return results
