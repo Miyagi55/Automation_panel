@@ -5,7 +5,7 @@ from typing import Any, Callable, Dict, List, Optional
 from app.models.account_model import AccountModel
 from app.models.playwright.session_handler import SessionHandler
 from app.utils.logger import logger
-from app.utils.config import ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS
+from app.utils.config import ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS, HEADLESS_MODE
 
 
 class AccountController:
@@ -16,8 +16,10 @@ class AccountController:
 
     def __init__(self, update_ui_callback: Optional[Callable] = None):
         self.account_model = AccountModel()
-        self.session_handler = SessionHandler()
+        # Pass the shared account_model instance to SessionHandler to prevent state races
+        self.session_handler = SessionHandler(account_model=self.account_model)
         self.update_ui_callback = update_ui_callback
+        self.headless = HEADLESS_MODE  # Use the global headless setting
 
     def add_account(
         self, user: str, password: str
@@ -142,13 +144,13 @@ class AccountController:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
-            try:
-                # Call open_browser_context instead of login_account
+            try:  # Call open_browser_context instead of login_account
                 result = loop.run_until_complete(
                     self.session_handler.open_browser_context(
                         account_id,
                         logger.info,
                         ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS,
+                        headless=self.headless,  # Pass headless flag from controller
                     )
                 )
 
