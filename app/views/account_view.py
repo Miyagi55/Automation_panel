@@ -19,16 +19,13 @@ class AccountView(BaseView):
     """
 
     def __init__(self, parent, controllers: Dict[str, Any]):
-        
         super().__init__(parent, controllers)
 
     def setup_ui(self):
-        
         self.create_header("Account Management")
 
         # Account entry form
         self._setup_entry_form()
-       
         self._setup_accounts_table()
         self._setup_action_buttons()
 
@@ -53,9 +50,7 @@ class AccountView(BaseView):
         import_btn = self.create_button("Import from .txt", self._import_accounts)
         import_btn.pack(padx=(0, self.padding // 2), fill='x')
 
-        
     def _import_accounts(self):
-        
         file_path = filedialog.askopenfilename(filetypes=[("Text files", "*.txt")])
         if file_path:
             count = self.controllers["account"].import_accounts_from_file(file_path)
@@ -63,7 +58,7 @@ class AccountView(BaseView):
                 "Import Accounts", f"Successfully imported {count} accounts"
             )
             self.refresh()
-            
+
     def _setup_accounts_table(self):
         """Set up the accounts table."""
         self.accounts_tree = ttk.Treeview(
@@ -117,25 +112,15 @@ class AccountView(BaseView):
         )
         delete_btn.pack(side="left", padx=(0, self.padding // 2))
 
-
-        #browser_btn_text =  "Run browser(s)"
         run_browser_btn = ctk.CTkButton(button_frame, text="Run browser(s)", command=self._run_browser)
         run_browser_btn.pack(side="left")
 
-        
-        #login_btn_text = "Auto login"
         auto_login_btn = ctk.CTkButton(button_frame, text="Auto login", command=self.auto_login_accounts)
         auto_login_btn.pack(side='right')
-        
-    
-        
 
     def refresh(self):
         """Refresh the accounts table."""
-        
         self.accounts_tree.delete(*self.accounts_tree.get_children())
-
-        
         accounts = self.controllers["account"].get_all_accounts()
 
         # If accounts is None or empty, just return
@@ -162,7 +147,6 @@ class AccountView(BaseView):
                 logger.error(f"Error adding account {account_id} to view: {str(e)}")
 
     def _add_account(self):
-       
         user = self.user_entry.get()
         password = self.pw_entry.get()
 
@@ -172,12 +156,11 @@ class AccountView(BaseView):
             self.user_entry.delete(0, tk.END)
             self.pw_entry.delete(0, tk.END)
             self.refresh()
-            messagebox.showinfo("Success", "Account addded sucessfully")
+            messagebox.showinfo("Success", "Account added successfully")
         else:
             messagebox.showerror("Error", error_message or "Failed to add account")
 
     def _edit_account(self):
-        
         selected = self.accounts_tree.selection()
         if not selected:
             messagebox.showwarning("Warning", "Please select an account to edit")
@@ -219,7 +202,6 @@ class AccountView(BaseView):
         save_btn.grid(row=2, column=0, columnspan=2, pady=10)
 
     def _delete_account(self):
-        
         selected = self.accounts_tree.selection()
         if not selected:
             messagebox.showwarning("Warning", "Please select an account to delete")
@@ -231,57 +213,39 @@ class AccountView(BaseView):
             for account_id in selected:
                 self.controllers["account"].delete_account(account_id)
             self.refresh()
-    
 
-    ## Repeated code! TODO: Refactor run_browser and auto_login_accounts methods for code reusability 
-    ##------------------------------test_account(s)-------------------°°°°!!!!!!!!!
+    def _test_accounts(self, action: str):
+        """Helper method to handle account testing for run_browser and auto_login_accounts."""
+        selected = self.accounts_tree.selection()
+        if not selected:
+            messagebox.showwarning(
+                "Warning", "Please select at least one account to test"
+            )
+            return
+
+        if action == "run_browser":
+            self.controllers["account"].run_browser(selected)
+        elif action == "auto_login":
+            self.controllers["account"].auto_login_accounts(list(selected))
+
+        # Update status immediately
+        for account_id in selected:
+            self.accounts_tree.item(
+                account_id,
+                values=(
+                    account_id,
+                    self.accounts_tree.item(account_id)["values"][1],  # Username
+                    self.accounts_tree.item(account_id)["values"][2],  # Password
+                    "Testing",
+                    "Testing",
+                    "",
+                ),
+            )
+
     def _run_browser(self):
-        
-        selected = self.accounts_tree.selection()
-        if not selected:
-            messagebox.showwarning(
-                "Warning", "Please select at least one account to test"
-            )
-            return
-    
-        self.controllers["account"].run_browser(selected)
-        
-        # Update status immediately
-        for account_id in selected:
-            self.accounts_tree.item(
-                account_id,
-                values=(
-                    account_id,
-                    self.accounts_tree.item(account_id)["values"][1],  # Username
-                    self.accounts_tree.item(account_id)["values"][2],  # Password
-                    "Testing",
-                    "Testing",
-                    "",
-                ),
-            )
+        """Run browser(s) for selected accounts."""
+        self._test_accounts("run_browser")
+
     def auto_login_accounts(self):
-        
-        selected = self.accounts_tree.selection()
-        if not selected:
-            messagebox.showwarning(
-                "Warning", "Please select at least one account to test"
-            )
-            return
-            
-        self.controllers["account"].auto_login_accounts(list(selected))
-
-        # Update status immediately
-        for account_id in selected:
-            self.accounts_tree.item(
-                account_id,
-                values=(
-                    account_id,
-                    self.accounts_tree.item(account_id)["values"][1],  # Username
-                    self.accounts_tree.item(account_id)["values"][2],  # Password
-                    "Testing",
-                    "Testing",
-                    "",
-                ),
-            )
-
-    
+        """Auto login for selected accounts."""
+        self._test_accounts("auto_login")

@@ -295,7 +295,7 @@ class SessionHandler:
                     log_func(f"Successfully opened session for account {account_id}")
                 else:
                     log_func(f"Failed to verify navigation for account {account_id}. Current URL: {current_url}")
-                    #await page.screenshot(path=f"{user_data_dir}/navigation_failed.png")
+                    
 
                 # Keep browser open if requested
                 if keep_browser_open_seconds > 0:
