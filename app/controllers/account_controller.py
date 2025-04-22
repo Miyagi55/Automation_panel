@@ -172,7 +172,7 @@ class AccountController:
                 )
 
                 # Update account statuses based on results
-                print(f"type: {type(results)}, \n\n{results.items()}")
+                logger.info(f"Results from run_browser - Type: {type(results)}, Items: {results.items()}")
                 for account_id, success in results.items():
                     if success:
                         self.update_account_status(
