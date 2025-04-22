@@ -134,6 +134,52 @@ class BatchProcessor:
     def __init__(self, session_handler):
         self.session_handler = session_handler
 
+    async def process_batch(
+        self,
+        items: List[Any],
+        process_func: Callable,
+        log_func: Callable[[str], None],
+        batch_size: int = 3,
+        concurrent_limit: int = 9,
+        **kwargs
+    ) -> Dict[Any, bool]:
+        """
+        Generic method to process items in batches with concurrency control.
+        Takes a processing function and additional keyword arguments for the function.
+        """
+        if not items:
+            log_func("No items to process")
+            return {}
+
+        semaphore = asyncio.Semaphore(concurrent_limit)
+        results = {}
+
+        async def process_item_with_semaphore(item: Any) -> Tuple[Any, bool]:
+            async with semaphore:
+                log_func(f"Starting processing for item {item}")
+                try:
+                    # Pass item and kwargs to the processing function
+                    success = await process_func(item, log_func=log_func, **kwargs)
+                    return item, success
+                except Exception as e:
+                    log_func(f"Error processing item {item}: {str(e)}")
+                    return item, False
+
+        # Process items in batches
+        for i in range(0, len(items), batch_size):
+            batch = items[i : i + batch_size]
+            log_func(f"Processing batch {i // batch_size + 1} with {len(batch)} items")
+
+            tasks = [process_item_with_semaphore(item) for item in batch]
+            for completed_task in asyncio.as_completed(tasks):
+                item, success = await completed_task
+                results[item] = success
+                log_func(
+                    f"Completed processing for item {item}: {'Success' if success else 'Failed'}"
+                )
+
+        return results
+
     async def auto_login_accounts(
         self,
         accounts: List[Dict[str, Any]],
@@ -147,34 +193,21 @@ class BatchProcessor:
             log_func("No chromium executable available")
             return {account["account_id"]: False for account in accounts}
 
-        semaphore = asyncio.Semaphore(concurrent_limit)
-        results = {}
+        async def login_task(account: Dict[str, Any], log_func: Callable[[str], None]) -> bool:
+            return await self.session_handler.login_account(
+                account["account_id"],
+                account["user"],
+                account["password"],
+                log_func,
+            )
 
-        async def test_account_with_semaphore(account: Dict[str, Any]) -> Tuple[str, bool]:
-            async with semaphore:
-                log_func(f"Starting test for account {account['account_id']}")
-                success = await self.session_handler.login_account(
-                    account["account_id"],
-                    account["user"],
-                    account["password"],
-                    log_func,
-                )
-                return account["account_id"], success
-
-        # Process accounts in batches
-        for i in range(0, len(accounts), batch_size):
-            batch = accounts[i : i + batch_size]
-            log_func(f"Processing batch {i // batch_size + 1} with {len(batch)} accounts")
-
-            tasks = [test_account_with_semaphore(account) for account in batch]
-            for completed_task in asyncio.as_completed(tasks):
-                account_id, success = await completed_task
-                results[account_id] = success
-                log_func(
-                    f"Completed test for account {account_id}: {'Success' if success else 'Failed'}"
-                )
-
-        return results
+        return await self.process_batch(
+            items=accounts,
+            process_func=login_task,
+            log_func=log_func,
+            batch_size=batch_size,
+            concurrent_limit=concurrent_limit
+        )
 
 
 
@@ -241,43 +274,39 @@ class SessionHandler:
         """
         return await self.batch_processor.auto_login_accounts(accounts, log_func, batch_size, concurrent_limit)
     
-
-
     async def open_sessions(
         self,
         account_ids: str | List[str],
         log_func: Callable[[str], None],
         keep_browser_open_seconds: int,
     ) -> Dict[str, bool]: 
-
+        """
+        Open sessions for one or multiple accounts concurrently using batch processing.
+        """
         # Normalize input to a list
         if isinstance(account_ids, str):
             account_ids = [account_ids]
         
-        results = {}
-        home_url = "https://www.facebook.com/home"
-
-        for account_id in account_ids:
+        async def open_session_task(account_id: str, log_func: Callable[[str], None], keep_browser_open_seconds: int) -> bool:
             log_func(f"Attempting to open session for account {account_id}")
             user_data_dir = self.browser_manager.get_session_dir(account_id)
+            home_url = "https://www.facebook.com/"
 
-            
             # Check if session directory exists
-            if not self.browser_manager.get_session_dir(account_id):
+            if not user_data_dir:
                 log_func(f"No session directory found for account {account_id} at {user_data_dir}")
-                results[account_id] = False
-                continue
+                return False
 
             # Create browser context
             browser = await self.browser_context.create_browser_context(account_id, log_func)
-            await self.cookie_manager.save_cookies(browser, account_id, log_func)
             if not browser:
                 log_func(f"Failed to create browser context for account {account_id}")
-                results[account_id] = False
-                continue
+                return False
 
             try:
-        
+                # Save cookies
+                await self.cookie_manager.save_cookies(browser, account_id, log_func)
+
                 # Open a new page and navigate to Facebook home URL
                 page = await browser.new_page()
                 await page.goto(home_url)
@@ -290,21 +319,26 @@ class SessionHandler:
                     log_func(f"Successfully opened session for account {account_id}")
                 else:
                     log_func(f"Failed to verify navigation for account {account_id}. Current URL: {current_url}")
-                    
 
                 # Keep browser open if requested
                 if keep_browser_open_seconds > 0:
                     log_func(f"Keeping browser open for {keep_browser_open_seconds} seconds for account {account_id}")
                     await asyncio.sleep(keep_browser_open_seconds)
 
-                results[account_id] = navigation_successful
+                return navigation_successful
 
             except Exception as e:
                 log_func(f"Error opening session for account {account_id}: {str(e)}")
-                results[account_id] = False
+                return False
             finally:
                 await browser.close()
                 log_func(f"Closed browser for account {account_id}")
 
-        return results
-#test commit on new branch
+        return await self.batch_processor.process_batch(
+            items=account_ids,
+            process_func=open_session_task,
+            log_func=log_func,
+            batch_size=3,
+            concurrent_limit=9,
+            keep_browser_open_seconds=keep_browser_open_seconds
+        )
