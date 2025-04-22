@@ -82,7 +82,7 @@ class LoginHandler:
                 await login_button.click()
             else:
                 log_func(f"Login button not found for account {account_id}")
-                await page.screenshot(path=f"{user_data_dir}/login_button_not_found.png")
+                
                 return False
 
             # Wait for navigation and check success
@@ -90,11 +90,6 @@ class LoginHandler:
             current_url = page.url
             login_successful = "login" not in current_url and "checkpoint" not in current_url
 
-            # Save screenshot for debugging
-            screenshot_path = (
-                f"{user_data_dir}/login_success.png" if login_successful else f"{user_data_dir}/login_failed.png"
-            )
-            await page.screenshot(path=screenshot_path)
             log_func(f"Login {'successful' if login_successful else 'failed'} for account {account_id}")
 
             return login_successful
