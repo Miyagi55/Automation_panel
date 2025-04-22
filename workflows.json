@@ -1,0 +1,34 @@
+{
+    "wf-masslikes-01": {
+        "actions": {
+            "Comments": {
+                "link": "",
+                "comments_file": null
+            },
+            "Posts": {
+                "content": "url.com"
+            },
+            "Live Views": {
+                "link": ""
+            },
+            "Likes": {
+                "link": ""
+            },
+            "Shares": {
+                "link": ""
+            }
+        },
+        "accounts": [
+            "pancracio@gmail.com",
+            "sandroski@outlook.com",
+            "querofleto@hotmail.com",
+            "firulais23@gmail.com",
+            "emiliano@yandex.com",
+            "sigmoide200@yahoo.com",
+            "subersivo@gmail.com",
+            "email8",
+            "sinergio@gmail.com",
+            "email10"
+        ]
+    }
+}
