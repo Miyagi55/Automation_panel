@@ -144,7 +144,6 @@ class AccountController:
         for account_id in account_ids:
             account = self.account_model.get_account(account_id)
             if account:
-                
                 self.update_account_status(account_id, "Running")
                 accounts_to_run.append(
                     {
@@ -154,53 +153,49 @@ class AccountController:
                     }
                 )
 
-        # Extract account IDs for open_sessions
         account_id_list = [account["account_id"] for account in accounts_to_run]
 
-        # Run in a separate thread
+        async def run_sessions():
+            results = await self.session_handler.open_sessions(
+                account_id_list,
+                logger.info,
+                keep_browser_open_seconds=ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS
+            )
+
+            for account_id, success in results.items():
+                if success:
+                    self.update_account_status(
+                        account_id,
+                        "Logged In",
+                        "Feed Simulated",
+                        "Successful session and feed simulation"
+                    )
+                else:
+                    self.update_account_status(
+                        account_id,
+                        "Session Failed",
+                        "Inactive",
+                        "Failed to open session or simulate feed"
+                    )
+
         def run_async_sessions():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-
             try:
-                results = loop.run_until_complete(
-                    self.session_handler.open_sessions(
-                        account_id_list,
-                        logger.info,
-                        keep_browser_open_seconds=ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS
-                    )
-                )
-
-                # Update account statuses based on results
-                logger.info(f"Results from run_browser - Type: {type(results)}, Items: {results.items()}")
-                for account_id, success in results.items():
-                    if success:
-                        self.update_account_status(
-                            account_id, "Logged In", "Available", "Successful session open"
-                        )
-                    else:
-                        self.update_account_status(
-                            account_id,
-                            "Session Failed",
-                            "Inactive",
-                            "Failed to open session",
-                        )
+                loop.run_until_complete(run_sessions())
             finally:
                 loop.close()
 
-        # Start the tests thread
         thread = threading.Thread(target=run_async_sessions)
         thread.daemon = True
         thread.start()
 
     def auto_login_accounts(self, account_ids: List[str]) -> None:
         """Test multiple accounts in batches."""
-        # Prepare account data for testing
         accounts_to_login = []
         for account_id in account_ids:
             account = self.account_model.get_account(account_id)
             if account:
-                # Update account status to indicate testing
                 self.update_account_status(account_id, "Login")
                 accounts_to_login.append(
                     {
@@ -210,35 +205,102 @@ class AccountController:
                     }
                 )
 
-        # Run in a separate thread
-        def run_auto_login_accs():
+        async def run_logins():
+            results = await self.session_handler.auto_login_accounts(
+                accounts_to_login, logger.info
+            )
+
+            for account_id, success in results.items():
+                if success:
+                    self.update_account_status(
+                        account_id,
+                        "Logged In",
+                        "Feed Simulated",
+                        "Successful login and feed simulation"
+                    )
+                else:
+                    self.update_account_status(
+                        account_id,
+                        "Login Failed",
+                        "Inactive",
+                        "Failed login or feed simulation"
+                    )
+
+        def run_async_logins():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-
             try:
-                results = loop.run_until_complete(
-                    self.session_handler.auto_login_accounts(
-                        accounts_to_login, logger.info
-                    )
+                loop.run_until_complete(run_logins())
+            finally:
+                loop.close()
+
+        thread = threading.Thread(target=run_async_logins)
+        thread.daemon = True
+        thread.start()
+
+    def simulate_feed_for_accounts(self, account_ids: List[str]) -> None:
+        """Simulate Facebook feed interaction for multiple accounts."""
+        accounts_to_simulate = []
+        for account_id in account_ids:
+            account = self.account_model.get_account(account_id)
+            if account:
+                self.update_account_status(account_id, "Simulating Feed")
+                accounts_to_simulate.append(
+                    {
+                        "account_id": account_id,
+                        "user": account["user"],
+                        "password": account["password"],
+                    }
                 )
 
-                # Update account statuses based on results logger
-                for account_id, success in results.items():
+        account_id_list = [account["account_id"] for account in accounts_to_simulate]
+
+        async def run_feed_simulation():
+            for account_id in account_id_list:
+                browser = await self.session_handler.browser_context.create_browser_context(account_id, logger.info)
+                if not browser:
+                    logger.info(f"Failed to create browser context for account {account_id}")
+                    self.update_account_status(
+                        account_id,
+                        "Simulation Failed",
+                        "Inactive",
+                        "Failed to create browser context"
+                    )
+                    continue
+
+                try:
+                    success = await self.session_handler.simulate_facebook_feed(
+                        account_id=account_id,
+                        url="https://www.facebook.com",
+                        browser=browser,
+                        log_func=logger.info,
+                        max_execution_time=60
+                    )
                     if success:
                         self.update_account_status(
-                            account_id, "Logged In", "Available", "Successful login"
+                            account_id,
+                            "Feed Simulated",
+                            "Active",
+                            "Successful feed simulation"
                         )
                     else:
                         self.update_account_status(
                             account_id,
-                            "Login Failed",
+                            "Simulation Failed",
                             "Inactive",
-                            "Failed login attempt",
+                            "Failed feed simulation"
                         )
+                finally:
+                    await browser.close()
+
+        def run_async_simulation():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(run_feed_simulation())
             finally:
                 loop.close()
 
-        # Start thread
-        thread = threading.Thread(target=run_auto_login_accs)
+        thread = threading.Thread(target=run_async_simulation)
         thread.daemon = True
         thread.start()
