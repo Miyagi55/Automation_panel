@@ -19,9 +19,9 @@ class AccountController:
         self.session_handler = SessionHandler()
         self.update_ui_callback = update_ui_callback
 
-    def add_account(
-        self, user: str, password: str
-    ) -> tuple[Optional[str], Optional[str]]:
+
+
+    def add_account(self, user: str, password: str) -> tuple[Optional[str], Optional[str]]:
         """Add a new account."""
         if not user or not password:
             logger.warning("Username and password required")
@@ -38,6 +38,8 @@ class AccountController:
         else:
             logger.warning(f"Failed to add account: {user}")
             return None, error_message or "Failed to add account"
+
+
 
     def update_account(self, account_id: str, user: str, password: str) -> bool:
         """Update an existing account."""
@@ -58,6 +60,8 @@ class AccountController:
         else:
             logger.warning(f"Failed to update account: {old_user}")
             return False
+
+
 
     def delete_account(self, account_id: str) -> bool:
         """Delete an account."""
@@ -80,13 +84,19 @@ class AccountController:
             logger.warning(f"Failed to delete account: {user}")
             return False
 
+
+
     def get_all_accounts(self) -> Dict[str, Dict[str, Any]]:
         """Get all accounts."""
         return self.account_model.get_all_accounts()
 
+
+
     def get_account(self, account_id: str) -> Optional[Dict[str, Any]]:
         """Get a single account."""
         return self.account_model.get_account(account_id)
+
+
 
     def update_account_status(
         self,
@@ -108,6 +118,8 @@ class AccountController:
             logger.warning(f"Failed to update status for account {account_id}")
             return False
 
+
+
     def import_accounts_from_file(self, file_path: str) -> int:
         """Import accounts from a file."""
         try:
@@ -127,8 +139,10 @@ class AccountController:
             logger.error(f"Error importing accounts: {str(e)}")
             return 0
 
+
+
     def test_account(self, account_id: str) -> None:
-        """Test a single account by opening its browser context."""  # Corrected docstring
+        """Test a single account by opening its browser context.""" # Corrected docstring
         account = self.account_model.get_account(account_id)
         if not account:
             logger.warning(f"Account not found: {account_id}")
@@ -155,20 +169,17 @@ class AccountController:
                 # Update account status based on result (simplified for just opening)
                 if result:
                     self.update_account_status(
-                        account_id,
-                        "Browser Opened",
-                        "Available",
-                        "Browser session opened",
+                        account_id, "Browser Opened", "Available", "Browser session opened"
                     )
                 else:
                     self.update_account_status(
                         account_id, "Open Failed", "Inactive", "Failed to open browser"
                     )
             except Exception as e:
-                logger.error(f"Error testing account {account_id}: {e}")
-                self.update_account_status(
-                    account_id, "Error", "Inactive", f"Error: {e}"
-                )
+                 logger.error(f"Error testing account {account_id}: {e}")
+                 self.update_account_status(
+                     account_id, "Error", "Inactive", f"Error: {e}"
+                 )
             finally:
                 loop.close()
 
@@ -177,8 +188,10 @@ class AccountController:
         thread.daemon = True
         thread.start()
 
+
+
     def test_multiple_accounts(self, account_ids: List[str]) -> None:
-        """Test multiple accounts by opening their browser contexts concurrently."""  # Corrected docstring
+        """Test multiple accounts by opening their browser contexts concurrently.""" # Corrected docstring
         # Prepare account data for testing
         accounts_to_test = []
         for account_id in account_ids:
@@ -194,9 +207,9 @@ class AccountController:
                     }
                 )
             else:
-                logger.warning(
-                    f"Account not found during multi-test prep: {account_id}"
-                )
+                 logger.warning(f"Account not found during multi-test prep: {account_id}")
+
+
 
         # Run tests in a separate thread
         def run_tests():
@@ -214,9 +227,8 @@ class AccountController:
                     for a in accounts_to_test
                 ]
                 # Added return_exceptions=True to handle individual task failures
-                results = loop.run_until_complete(
-                    asyncio.gather(*tasks, return_exceptions=True)
-                )
+                results = loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
+
 
                 # Update account statuses based on results
                 for i, result in enumerate(results):
@@ -224,50 +236,39 @@ class AccountController:
                     if i < len(accounts_to_test):
                         account_id = accounts_to_test[i]["account_id"]
                         if isinstance(result, Exception):
-                            logger.error(
-                                f"Error opening browser for {account_id}: {result}"
-                            )
+                            logger.error(f"Error opening browser for {account_id}: {result}")
                             self.update_account_status(
                                 account_id,
                                 "Open Failed",
                                 "Inactive",
                                 f"Failed to open browser: {result}",
                             )
-                        elif result:  # result is True if successful
+                        elif result: # result is True if successful
                             self.update_account_status(
-                                account_id,
-                                "Browser Opened",
-                                "Available",
-                                "Browser session opened",
+                                account_id, "Browser Opened", "Available", "Browser session opened"
                             )
-                        else:  # result is False
-                            self.update_account_status(
+                        else: # result is False
+                             self.update_account_status(
                                 account_id,
                                 "Open Failed",
                                 "Inactive",
                                 "Failed to open browser",
                             )
                     else:
-                        logger.error(
-                            f"Result index {i} out of bounds for accounts_to_test (length {len(accounts_to_test)})"
-                        )
+                        logger.error(f"Result index {i} out of bounds for accounts_to_test (length {len(accounts_to_test)})")
+
 
             except Exception as e:
-                logger.error(f"Error during multi-account test execution: {e}")
-                # Potentially update all tested accounts to an error state
-                for acc in accounts_to_test:
-                    # Check if account_id exists before updating status
-                    if "account_id" in acc:
-                        self.update_account_status(
-                            acc["account_id"],
-                            "Error",
-                            "Inactive",
-                            f"Multi-test error: {e}",
-                        )
-                    else:
-                        logger.error(
-                            f"Missing 'account_id' in account data during error handling: {acc}"
-                        )
+                 logger.error(f"Error during multi-account test execution: {e}")
+                 # Potentially update all tested accounts to an error state
+                 for acc in accounts_to_test:
+                     # Check if account_id exists before updating status
+                     if "account_id" in acc:
+                         self.update_account_status(
+                             acc["account_id"], "Error", "Inactive", f"Multi-test error: {e}"
+                         )
+                     else:
+                         logger.error(f"Missing 'account_id' in account data during error handling: {acc}")
             finally:
                 loop.close()
 
