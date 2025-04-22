@@ -1,203 +1,111 @@
-"""
-Session handler for managing browser sessions and interactions.
-"""
-
 import asyncio
 import random
 from typing import Any, Callable, Dict, List, Tuple
 
 from app.models.account_model import AccountModel
+from app.utils.config import URL
+
 from .browser_manager import BrowserManager
-from app.utils.config import LINK_LOGIN
-from patchright.async_api import async_playwright
 
 
+class SessionHandler:
+    """
+    Handles browser sessions and interactions using Playwright (via patchright).
+    """
 
+    # Accept AccountModel instance during initialization
+    def __init__(self, account_model: AccountModel):
+        self.browser_manager = BrowserManager()
+        self._playwright = None  # shared Playwright instance
+        self.url = URL
+        self.account_model = account_model  # Store the shared instance
+        self._lock = asyncio.Lock()  # Add asyncio lock for playwright start/stop
 
-#----------------------------------------class-------------------------------------------!!!!!!!
-class BrowserContext:
-    """Manages browser context creation and configuration."""
+    async def _ensure_playwright(self):
+        """
+        Start a patchright Playwright instance if not already (asyncio-safe).
+        """
+        async with self._lock:  # Protect check and start
+            if self._playwright is None:
+                from patchright.async_api import async_playwright
 
-    def __init__(self, browser_manager: BrowserManager):
-        self.browser_manager = browser_manager
+                self._playwright = await async_playwright().start()
 
-    async def create_browser_context(self, account_id: str, log_func: Callable[[str], None]):
-        """Creates a persistent browser context for the given account."""
+    async def _shutdown_playwright(self):
+        """
+        Stop the Playwright instance (asyncio-safe).
+        TODO: Implement reference counting or better lifecycle management
+              if multiple concurrent operations need playwright.
+              For now, just lock the shutdown.
+        """
+        async with self._lock:  # Protect check and stop
+            if self._playwright:
+                await self._playwright.stop()
+                self._playwright = None
+
+    async def _open_context(
+        self,
+        account_id: str,
+        log_func: Callable[[str], None],
+        headless: bool = False,
+    ) -> Tuple[Any, Any]:
+        """
+        Launch a persistent Chromium context for the account.
+        Returns (context, playwright_instance) or (None, None) on failure.
+        """
+        await self._ensure_playwright()
+        p = self._playwright
+
         chromium_exe = self.browser_manager.get_chromium_executable(log_func)
         if not chromium_exe:
             log_func(f"No chromium executable found for account {account_id}")
-            return None
+            return None, None
 
         user_data_dir = self.browser_manager.get_session_dir(account_id)
-        log_func(f"Starting browser for account {account_id} using session dir: {user_data_dir}")
-
         try:
-            playwright = await async_playwright().__aenter__()
-            browser = await playwright.chromium.launch_persistent_context(
+            context = await p.chromium.launch_persistent_context(
+                executable_path=chromium_exe,
+                headless=headless,
                 no_viewport=True,
-                channel="chrome",
-                headless=False,
                 user_data_dir=user_data_dir,
+                args=[],  # override default flags, removes --no-sandbox
             )
-            return browser
+            return context, p
         except Exception as e:
-            log_func(f"Error creating browser context for account {account_id}: {str(e)}")
-            return None
+            log_func(f"Error launching browser context for {account_id}: {e}")
+            return None, None
 
-
-
-
-
-#----------------------------------------class-------------------------------------------!!!!!!!
-class LoginHandler:
-    """Handles the login process for a single account."""
-
-    async def perform_login(
+    async def open_browser_context(
         self,
-        browser,
         account_id: str,
-        user: str,
-        password: str,
         log_func: Callable[[str], None],
-        user_data_dir: str,
+        keep_open_seconds: int,
     ) -> bool:
-        """Executes the login process and returns True if successful."""
-        try:
-            page = await browser.new_page()
-            await page.goto(LINK_LOGIN)
-            log_func(f"Navigated to login page for account {account_id}")
-
-            # Wait for login form
-            email_field = await page.wait_for_selector("input#email", timeout=30000)
-            password_field = await page.wait_for_selector("input#pass", timeout=30000)
-
-            # Type credentials with human-like delay
-            await self._type_with_human_delay(email_field, user, log_func)
-            await asyncio.sleep(random.uniform(0.5, 2.0))
-            await self._type_with_human_delay(password_field, password, log_func)
-
-            # Click login button
-            login_button = await page.wait_for_selector('button[name="login"]', timeout=30000)
-            if login_button:
-                await login_button.click()
-            else:
-                log_func(f"Login button not found for account {account_id}")
-                await page.screenshot(path=f"{user_data_dir}/login_button_not_found.png")
-                return False
-
-            # Wait for navigation and check success
-            await asyncio.sleep(5)
-            current_url = page.url
-            login_successful = "login" not in current_url and "checkpoint" not in current_url
-
-            # Save screenshot for debugging
-            screenshot_path = (
-                f"{user_data_dir}/login_success.png" if login_successful else f"{user_data_dir}/login_failed.png"
-            )
-            await page.screenshot(path=screenshot_path)
-            log_func(f"Login {'successful' if login_successful else 'failed'} for account {account_id}")
-
-            return login_successful
-        except Exception as e:
-            log_func(f"Error during login for account {account_id}: {str(e)}")
+        """
+        Open browser context without login and keep it open for the interval.
+        """
+        ctx, p = await self._open_context(account_id, log_func, headless=False)
+        if not ctx:
             return False
 
-    async def _type_with_human_delay(self, element, text: str, log_func: Callable[[str], None]) -> None:
-        """Simulates human-like typing with random delays."""
-        for char in text:
-            await element.type(char, delay=0)
-            await asyncio.sleep(random.uniform(0.05, 0.3))
-
-
-
-
-#----------------------------------------class-------------------------------------------!!!!!!!
-class CookieManager:
-    """Manages cookie persistence for accounts."""
-
-    async def save_cookies(self, browser, account_id: str, log_func: Callable[[str], None]) -> None:
-        """Persists cookies for the given account."""
+        log_func(
+            f"Opened browser for account {account_id}, keeping it open {keep_open_seconds}s…"
+        )
+        success = False
         try:
-            cookies = await browser.cookies()
-            cookies_dicts = [dict(cookie) for cookie in cookies]
-
-            account_model = AccountModel()
-            account_model.update_account_cookies(account_id, cookies_dicts)
-            log_func(f"Persisted cookies for account {account_id}")
-
+            # open URL
+            page = await ctx.new_page()
+            await page.goto(self.url)
+            await asyncio.sleep(keep_open_seconds)
+            success = True
         except Exception as e:
-            log_func(f"Failed to persist cookies for account {account_id}: {str(e)}")
-
-
-
-
-
-#----------------------------------------class-------------------------------------------!!!!!!!
-class BatchProcessor:
-    """Handles batch processing of multiple accounts with concurrency control."""
-
-    def __init__(self, session_handler):
-        self.session_handler = session_handler
-
-    async def auto_login_accounts(
-        self,
-        accounts: List[Dict[str, Any]],
-        log_func: Callable[[str], None],
-        batch_size: int = 3,
-        concurrent_limit: int = 9,
-    ) -> Dict[str, bool]:
-        """Tests multiple accounts with batching and concurrency limits."""
-        browser_manager = self.session_handler.browser_manager
-        if not browser_manager.get_chromium_executable(log_func):
-            log_func("No chromium executable available")
-            return {account["account_id"]: False for account in accounts}
-
-        semaphore = asyncio.Semaphore(concurrent_limit)
-        results = {}
-
-        async def test_account_with_semaphore(account: Dict[str, Any]) -> Tuple[str, bool]:
-            async with semaphore:
-                log_func(f"Starting test for account {account['account_id']}")
-                success = await self.session_handler.login_account(
-                    account["account_id"],
-                    account["user"],
-                    account["password"],
-                    log_func,
-                )
-                return account["account_id"], success
-
-        # Process accounts in batches
-        for i in range(0, len(accounts), batch_size):
-            batch = accounts[i : i + batch_size]
-            log_func(f"Processing batch {i // batch_size + 1} with {len(batch)} accounts")
-
-            tasks = [test_account_with_semaphore(account) for account in batch]
-            for completed_task in asyncio.as_completed(tasks):
-                account_id, success = await completed_task
-                results[account_id] = success
-                log_func(
-                    f"Completed test for account {account_id}: {'Success' if success else 'Failed'}"
-                )
-
-        return results
-
-
-
-
-
-#----------------------------------------class-------------------------------------------!!!!!!!
-class SessionHandler:
-    """
-    Coordinates browser sessions and interactions.
-    Delegates tasks to specialized classes for login, cookies, and batch processing.
-    """
-
-    def __init__(self):
-        self.browser_manager = BrowserManager()
-        self.browser_context = BrowserContext(self.browser_manager)
-        self.login_handler = LoginHandler()
-        self.cookie_manager = CookieManager()
-        self.batch_processor = BatchProcessor(self)
+            log_func(f"Error during open_browser_context for {account_id}: {e}")
+        finally:
+            try:
+                await ctx.close()
+            except Exception as e:
+                log_func(f"Error closing context for {account_id}: {e}")
+        return success
 
     async def login_account(
         self,
@@ -208,33 +116,84 @@ class SessionHandler:
         keep_browser_open_seconds: int = 0,
     ) -> bool:
         """
-        Login to Facebook using account credentials.
-        Returns True if login was successful, False otherwise.
-        Optionally keeps the browser open for manual testing.
+        Log in to Facebook and optionally keep browser open on success.
+        Uses the shared AccountModel instance.
         """
-        user_data_dir = self.browser_manager.get_session_dir(account_id)
-        browser = await self.browser_context.create_browser_context(account_id, log_func)
-        if not browser:
+        log_func(f"Starting login for account {account_id}")
+        ctx, p = await self._open_context(account_id, log_func, headless=False)
+        if not ctx:
             return False
 
+        login_successful = False
         try:
-            login_successful = await self.login_handler.perform_login(
-                browser, account_id, user, password, log_func, user_data_dir
+            page = await ctx.new_page()
+            await page.goto(URL + "/login")
+            log_func(f"Navigated to login page for {account_id}")
+
+            email_field = await page.wait_for_selector("input#email", timeout=30000)
+            pwd_field = await page.wait_for_selector("input#pass", timeout=30000)
+
+            await self._type_with_human_delay(email_field, user)
+            await asyncio.sleep(random.uniform(0.5, 2.0))
+            await self._type_with_human_delay(pwd_field, password)
+
+            btn = await page.wait_for_selector('button[name="login"]', timeout=30000)
+            if not btn:
+                log_func(f"Login button missing for {account_id}")
+                await page.screenshot(
+                    path=f"{user_data_dir}/login_button_not_found.png"
+                )
+                return False
+            await btn.click()
+
+            await asyncio.sleep(5)
+            current_url = page.url
+            login_successful = (
+                "login" not in current_url and "checkpoint" not in current_url
             )
 
-            # Persist cookies
-            await self.cookie_manager.save_cookies(browser, account_id, log_func)
+            user_data_dir = self.browser_manager.get_session_dir(account_id)
+            screenshot = "login_success.png" if login_successful else "login_failed.png"
+            log_func(
+                f"Login {'succeeded' if login_successful else 'failed'} for {account_id}"
+            )
+            await page.screenshot(path=f"{user_data_dir}/{screenshot}")
 
-            # Keep browser open if requested
-            if keep_browser_open_seconds > 0:
-                log_func(f"Keeping browser open for {keep_browser_open_seconds} seconds for manual testing...")
+            # Persist cookies using the shared, thread-safe account_model
+            try:
+                cookies = await ctx.cookies()
+                # Use the shared self.account_model instance
+                self.account_model.update_account_cookies(
+                    account_id, [dict(c) for c in cookies]
+                )
+                log_func(f"Persisted cookies for {account_id}")
+            except Exception as e:
+                log_func(f"Cookie save error for {account_id}: {e}")
+
+            if keep_browser_open_seconds and login_successful:
+                log_func(
+                    f"Keeping browser open for {keep_browser_open_seconds}s for testing…"
+                )
                 await asyncio.sleep(keep_browser_open_seconds)
 
-            return login_successful
+        except Exception as e:
+            log_func(f"Error during login for {account_id}: {e}")
         finally:
-            await browser.close()
+            try:
+                await ctx.close()
+            except:
+                pass
+        return login_successful
 
-    async def auto_login_accounts(
+    async def _type_with_human_delay(self, element, text: str) -> None:
+        """
+        Type text character-by-character with slight random delays.
+        """
+        for ch in text:
+            await element.type(ch)
+            await asyncio.sleep(random.uniform(0.05, 0.3))
+
+    async def test_multiple_accounts(
         self,
         accounts: List[Dict[str, Any]],
         log_func: Callable[[str], None],
@@ -242,73 +201,34 @@ class SessionHandler:
         concurrent_limit: int = 9,
     ) -> Dict[str, bool]:
         """
-        Test multiple accounts, with configurable batch size and concurrency.
+        Concurrently test multiple account logins in batches.
+        Uses the shared AccountModel instance.
         """
-        return await self.batch_processor.auto_login_accounts(accounts, log_func, batch_size, concurrent_limit)
-    
-
-
-    async def open_sessions(
-        self,
-        account_ids: str | List[str],
-        log_func: Callable[[str], None],
-        keep_browser_open_seconds: int,
-    ) -> Dict[str, bool]: 
-
-        # Normalize input to a list
-        if isinstance(account_ids, str):
-            account_ids = [account_ids]
-        
+        semaphore = asyncio.Semaphore(concurrent_limit)
         results = {}
-        home_url = "https://www.facebook.com/home"
 
-        for account_id in account_ids:
-            log_func(f"Attempting to open session for account {account_id}")
-            user_data_dir = self.browser_manager.get_session_dir(account_id)
+        async def _test(acc: Dict[str, Any]) -> Tuple[str, bool]:
+            async with semaphore:
+                log_func(f"Testing {acc['account_id']}")
+                # login_account now uses the shared account_model implicitly
+                ok = await self.login_account(
+                    acc["account_id"], acc["user"], acc["password"], log_func
+                )
+                return acc["account_id"], ok
 
-            
-            # Check if session directory exists
-            if not self.browser_manager.get_session_dir(account_id):
-                log_func(f"No session directory found for account {account_id} at {user_data_dir}")
-                results[account_id] = False
-                continue
+        for i in range(0, len(accounts), batch_size):
+            batch = accounts[i : i + batch_size]
+            log_func(f"Batch {i//batch_size+1}: testing {len(batch)} accounts")
+            tasks = [asyncio.create_task(_test(acc)) for acc in batch]
+            for coro in asyncio.as_completed(tasks):
+                acc_id, ok = await coro
+                results[acc_id] = ok
+                log_func(f"{acc_id} test {'passed' if ok else 'failed'}")
 
-            # Create browser context
-            browser = await self.browser_context.create_browser_context(account_id, log_func)
-            await self.cookie_manager.save_cookies(browser, account_id, log_func)
-            if not browser:
-                log_func(f"Failed to create browser context for account {account_id}")
-                results[account_id] = False
-                continue
-
-            try:
-        
-                # Open a new page and navigate to Facebook home URL
-                page = await browser.new_page()
-                await page.goto(home_url)
-                log_func(f"Navigated to {home_url} for account {account_id}")
-
-                # Verify navigation success (basic check: page loaded and URL is correct)
-                current_url = page.url
-                navigation_successful = home_url in current_url and "login" not in current_url
-                if navigation_successful:
-                    log_func(f"Successfully opened session for account {account_id}")
-                else:
-                    log_func(f"Failed to verify navigation for account {account_id}. Current URL: {current_url}")
-                    
-
-                # Keep browser open if requested
-                if keep_browser_open_seconds > 0:
-                    log_func(f"Keeping browser open for {keep_browser_open_seconds} seconds for account {account_id}")
-                    await asyncio.sleep(keep_browser_open_seconds)
-
-                results[account_id] = navigation_successful
-
-            except Exception as e:
-                log_func(f"Error opening session for account {account_id}: {str(e)}")
-                results[account_id] = False
-            finally:
-                await browser.close()
-                log_func(f"Closed browser for account {account_id}")
+        # TODO: Reconsider shutting down playwright here. If other operations
+        # might be running concurrently, this could cause issues.
+        # A better approach might be needed (e.g., explicit shutdown call from main app).
+        # For now, keep the locked shutdown:
+        await self._shutdown_playwright()
 
         return results
