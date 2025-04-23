@@ -247,7 +247,18 @@ class SessionHandler:
 
             return login_successful
         finally:
-            await browser.close()
+            # Check if browser exists and is still connected before closing
+            if browser and browser.is_connected():
+                try:
+                    await browser.close()
+                    log_func(f"Closed browser for account {account_id}")
+                except Exception as close_exc:
+                    # Log error during close, but don't crash the loop
+                    log_func(f"Error closing browser for account {account_id}: {str(close_exc)}")
+            elif browser:
+                # Log if browser existed but was already disconnected
+                log_func(f"Browser for account {account_id} was already disconnected, skipping close.")
+            # No need for an else if browser is None, as it means context creation failed earlier
 
     async def auto_login_accounts(
         self,
@@ -329,7 +340,17 @@ class SessionHandler:
                 log_func(f"Error opening session for account {account_id}: {str(e)}")
                 results[account_id] = False
             finally:
-                await browser.close()
-                log_func(f"Closed browser for account {account_id}")
+                # Check if browser exists and is still connected before closing
+                if browser and browser.is_connected():
+                    try:
+                        await browser.close()
+                        log_func(f"Closed browser for account {account_id}")
+                    except Exception as close_exc:
+                        # Log error during close, but don't crash the loop
+                        log_func(f"Error closing browser for account {account_id}: {str(close_exc)}")
+                elif browser:
+                    # Log if browser existed but was already disconnected
+                    log_func(f"Browser for account {account_id} was already disconnected, skipping close.")
+                # No need for an else if browser is None, as it means context creation failed earlier
 
         return results
