@@ -1,11 +1,13 @@
 import asyncio
+import shutil
 import threading
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from app.models.account_model import AccountModel
 from app.models.playwright.session_handler import SessionHandler
-from app.utils.logger import logger
 from app.utils.config import ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS
+from app.utils.logger import logger
 
 
 class AccountController:
@@ -19,7 +21,9 @@ class AccountController:
         self.session_handler = SessionHandler()
         self.update_ui_callback = update_ui_callback
 
-    def add_account(self, user: str, password: str) -> tuple[Optional[str], Optional[str]]:
+    def add_account(
+        self, user: str, password: str
+    ) -> tuple[Optional[str], Optional[str]]:
         """Add a new account."""
         if not user or not password:
             logger.warning("Username and password required")
@@ -58,32 +62,69 @@ class AccountController:
             return False
 
     def delete_account(self, account_id: str) -> bool:
-        """Delete an account."""
+        """Delete an account and its associated session directory."""
         account = self.account_model.get_account(account_id)
         if not account:
             logger.warning(f"Account not found: {account_id}")
             return False
 
-        user = account["user"]
+        user = account.get("user", "Unknown")  # Use .get for safer access
+
+        # TODO: This might benefit from refactoring or isolating this logic in a separate method,
+        # but for now let's be pragmatic
+        # Delete the session directory if it exists
+        try:
+            # Assuming session_handler and browser_manager are correctly initialized
+            session_dir_str = self.session_handler.browser_manager.get_session_dir(
+                account_id
+            )
+            if session_dir_str:
+                session_dir = Path(session_dir_str)
+                if session_dir.exists() and session_dir.is_dir():
+                    shutil.rmtree(session_dir)
+                    logger.info(
+                        f"Deleted session directory for account {user} (ID: {account_id}): {session_dir}"
+                    )
+                elif not session_dir.exists():
+                    logger.info(
+                        f"Session directory not found for account {user} (ID: {account_id}), skipping deletion."
+                    )
+            else:
+                logger.warning(
+                    f"Could not determine session directory for account {user} (ID: {account_id})"
+                )
+
+        except AttributeError as e:
+            logger.error(
+                f"Error accessing session handler or browser manager: {e}. Cannot delete session directory."
+            )
+        except Exception as e:
+            logger.error(
+                f"Error deleting session directory for account {user} (ID: {account_id}): {str(e)}"
+            )
+            # Decide if you want to proceed with account deletion even if session cleanup fails
+            # For now, we proceed
+
+        # Proceed with deleting the account from the model
         success = self.account_model.delete_account(account_id)
 
         if success:
             logger.info(
-                f"Deleted account: {user} (ID: {account_id}, Total: {len(self.account_model.accounts)})"
+                f"Successfully deleted account: {user} (ID: {account_id}, Total: {len(self.account_model.accounts)})"
             )
             if self.update_ui_callback:
-                self.update_ui_callback()
+                self.update_ui_callback()  # Refresh UI
             return True
         else:
-            logger.warning(f"Failed to delete account: {user}")
+            logger.warning(
+                f"Failed to delete account from model: {user} (ID: {account_id})"
+            )
             return False
 
     def get_all_accounts(self) -> Dict[str, Dict[str, Any]]:
-        
         return self.account_model.get_all_accounts()
 
     def get_account(self, account_id: str) -> Optional[Dict[str, Any]]:
-        
         return self.account_model.get_account(account_id)
 
     def update_account_status(
@@ -116,10 +157,10 @@ class AccountController:
                         # Strip whitespace from the line
                         line = line.strip()
                         # Check for either ':' or ',' as separator
-                        if ':' in line:
-                            user, password = line.split(':')
-                        elif ',' in line:
-                            user, password = line.split(',')
+                        if ":" in line:
+                            user, password = line.split(":")
+                        elif "," in line:
+                            user, password = line.split(",")
                         else:
                             logger.warning(f"Invalid line in import file: {line}")
                             continue
@@ -144,7 +185,6 @@ class AccountController:
         for account_id in account_ids:
             account = self.account_model.get_account(account_id)
             if account:
-                
                 self.update_account_status(account_id, "Running")
                 accounts_to_run.append(
                     {
@@ -167,16 +207,21 @@ class AccountController:
                     self.session_handler.open_sessions(
                         account_id_list,
                         logger.info,
-                        keep_browser_open_seconds=ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS
+                        keep_browser_open_seconds=ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS,
                     )
                 )
 
                 # Update account statuses based on results
-                logger.info(f"Results from run_browser - Type: {type(results)}, Items: {results.items()}")
+                logger.info(
+                    f"Results from run_browser - Type: {type(results)}, Items: {results.items()}"
+                )
                 for account_id, success in results.items():
                     if success:
                         self.update_account_status(
-                            account_id, "Logged In", "Available", "Successful session open"
+                            account_id,
+                            "Logged In",
+                            "Available",
+                            "Successful session open",
                         )
                     else:
                         self.update_account_status(
