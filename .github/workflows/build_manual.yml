@@ -1,34 +1,47 @@
-name: Manual • Build Windows EXE
+name: PyInstaller Auto-Release
 
 on:
-  workflow_dispatch: # ⇒ “Run workflow” button in the UI
+  push:
+    branches:
+      - master  # trigger on master
+
+permissions:
+  contents: write
 
 jobs:
-  build-exe:
-    runs-on: windows-latest # We need Windows to bundle a Windows EXE
-    timeout-minutes: 30
+  build:
+    runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: 🐍 Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v4
         with:
           python-version: "3.12"
 
-      - name: ⚡ Install uv (packager) & project deps
+      - name: Install project & PyInstaller
         run: |
-          python -m pip install --upgrade pip uv
-          uv pip install .           # reads your **pyproject.toml**
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pyinstaller
 
-      - name: 🏗 Build with PyInstaller
-        shell: cmd
-        run: build.bat # your script already runs pyinstaller
+      - name: Build binary
+        run: |
+          pyinstaller --noconfirm --onefile app.py --name AutomationPanel
 
-      - name: 📦 Upload EXE artifact
-        uses: actions/upload-artifact@v4
+      - name: Rename binary
+        run: |
+          TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
+          echo "RELEASE_NAME=build-${TIMESTAMP}" >> $GITHUB_ENV
+          mkdir release
+          mv dist/AutomationPanel release/AutomationPanel-linux
+
+      - name: Create GitHub Release (auto-named)
+        uses: softprops/action-gh-release@v2
         with:
-          name: AutomationPanel-win
-          path: dist/AutomationPanel.exe
-          retention-days: 14
+          name: ${{ env.RELEASE_NAME }}
+          tag_name: ${{ env.RELEASE_NAME }}
+          prerelease: true
+          files: release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
