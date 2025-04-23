@@ -1,7 +1,3 @@
-"""
-Account controller to handle account operations.
-"""
-
 import asyncio
 import threading
 from typing import Any, Callable, Dict, List, Optional
@@ -9,8 +5,7 @@ from typing import Any, Callable, Dict, List, Optional
 from app.models.account_model import AccountModel
 from app.models.playwright.session_handler import SessionHandler
 from app.utils.logger import logger
-
-ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS = 300  # 5 minutes, edit as needed
+from app.utils.config import ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS
 
 
 class AccountController:
@@ -24,23 +19,23 @@ class AccountController:
         self.session_handler = SessionHandler()
         self.update_ui_callback = update_ui_callback
 
-    def add_account(self, user: str, password: str) -> Optional[str]:
+    def add_account(self, user: str, password: str) -> tuple[Optional[str], Optional[str]]:
         """Add a new account."""
         if not user or not password:
             logger.warning("Username and password required")
-            return None
+            return None, "Username and password cannot be empty"
 
-        account_id = self.account_model.add_account(user, password)
+        account_id, error_message = self.account_model.add_account(user, password)
         if account_id:
             logger.info(
                 f"Added account: {user} (ID: {account_id}, Total: {len(self.account_model.accounts)})"
             )
             if self.update_ui_callback:
                 self.update_ui_callback()
-            return account_id
+            return account_id, None
         else:
             logger.warning(f"Failed to add account: {user}")
-            return None
+            return None, error_message or "Failed to add account"
 
     def update_account(self, account_id: str, user: str, password: str) -> bool:
         """Update an existing account."""
@@ -84,11 +79,11 @@ class AccountController:
             return False
 
     def get_all_accounts(self) -> Dict[str, Dict[str, Any]]:
-        """Get all accounts."""
+        
         return self.account_model.get_all_accounts()
 
     def get_account(self, account_id: str) -> Optional[Dict[str, Any]]:
-        """Get a single account."""
+        
         return self.account_model.get_account(account_id)
 
     def update_account_status(
@@ -118,72 +113,40 @@ class AccountController:
                 count = 0
                 for line in f:
                     try:
-                        user, password = line.strip().split(",")
+                        # Strip whitespace from the line
+                        line = line.strip()
+                        # Check for either ':' or ',' as separator
+                        if ':' in line:
+                            user, password = line.split(':')
+                        elif ',' in line:
+                            user, password = line.split(',')
+                        else:
+                            logger.warning(f"Invalid line in import file: {line}")
+                            continue
+                        # Strip whitespace from user and password
+                        user = user.strip()
+                        password = password.strip()
+                        # Add account and increment count if successful
                         account_id = self.add_account(user, password)
                         if account_id:
                             count += 1
                     except ValueError:
-                        logger.warning(f"Invalid line in import file: {line.strip()}")
+                        logger.warning(f"Invalid line in import file: {line}")
                 logger.info(f"Imported {count} accounts from {file_path}")
                 return count
         except Exception as e:
             logger.error(f"Error importing accounts: {str(e)}")
             return 0
 
-    def test_account(self, account_id: str) -> None:
-        """Test a single account login."""
-        account = self.account_model.get_account(account_id)
-        if not account:
-            logger.warning(f"Account not found: {account_id}")
-            return
-
-        # Update account status to indicate testing
-        self.update_account_status(account_id, "Testing")
-
-        # Run the test in a separate thread
-        def run_test():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-            try:
-                result = loop.run_until_complete(
-                    self.session_handler.login_account(
-                        account_id,
-                        account["user"],
-                        account["password"],
-                        logger.info,
-                        keep_browser_open_seconds=ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS,
-                    )
-                )
-
-                # Update account status based on result
-                if result:
-                    self.update_account_status(
-                        account_id, "Logged In", "Available", "Successful login"
-                    )
-                else:
-                    self.update_account_status(
-                        account_id, "Login Failed", "Inactive", "Failed login attempt"
-                    )
-            finally:
-                loop.close()
-
-        # Start the test thread
-        thread = threading.Thread(target=run_test)
-        thread.daemon = True
-        thread.start()
-
-    def test_multiple_accounts(self, account_ids: List[str]) -> None:
-        """Test multiple accounts in batches."""
-        # Prepare account data for testing
-        accounts_to_test = []
+    def run_browser(self, account_ids: List[str]) -> None:
+        """Test a single or multiple account logins by opening existing sessions."""
+        accounts_to_run = []
         for account_id in account_ids:
             account = self.account_model.get_account(account_id)
             if account:
-                # Update account status to indicate testing
-                self.update_account_status(account_id, "Testing")
-
-                accounts_to_test.append(
+                
+                self.update_account_status(account_id, "Running")
+                accounts_to_run.append(
                     {
                         "account_id": account_id,
                         "user": account["user"],
@@ -191,19 +154,75 @@ class AccountController:
                     }
                 )
 
-        # Run tests in a separate thread
-        def run_tests():
+        # Extract account IDs for open_sessions
+        account_id_list = [account["account_id"] for account in accounts_to_run]
+
+        # Run in a separate thread
+        def run_async_sessions():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
             try:
                 results = loop.run_until_complete(
-                    self.session_handler.test_multiple_accounts(
-                        accounts_to_test, logger.info
+                    self.session_handler.open_sessions(
+                        account_id_list,
+                        logger.info,
+                        keep_browser_open_seconds=ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS
                     )
                 )
 
                 # Update account statuses based on results
+                logger.info(f"Results from run_browser - Type: {type(results)}, Items: {results.items()}")
+                for account_id, success in results.items():
+                    if success:
+                        self.update_account_status(
+                            account_id, "Logged In", "Available", "Successful session open"
+                        )
+                    else:
+                        self.update_account_status(
+                            account_id,
+                            "Session Failed",
+                            "Inactive",
+                            "Failed to open session",
+                        )
+            finally:
+                loop.close()
+
+        # Start the tests thread
+        thread = threading.Thread(target=run_async_sessions)
+        thread.daemon = True
+        thread.start()
+
+    def auto_login_accounts(self, account_ids: List[str]) -> None:
+        """Test multiple accounts in batches."""
+        # Prepare account data for testing
+        accounts_to_login = []
+        for account_id in account_ids:
+            account = self.account_model.get_account(account_id)
+            if account:
+                # Update account status to indicate testing
+                self.update_account_status(account_id, "Login")
+                accounts_to_login.append(
+                    {
+                        "account_id": account_id,
+                        "user": account["user"],
+                        "password": account["password"],
+                    }
+                )
+
+        # Run in a separate thread
+        def run_auto_login_accs():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            try:
+                results = loop.run_until_complete(
+                    self.session_handler.auto_login_accounts(
+                        accounts_to_login, logger.info
+                    )
+                )
+
+                # Update account statuses based on results logger
                 for account_id, success in results.items():
                     if success:
                         self.update_account_status(
@@ -219,7 +238,7 @@ class AccountController:
             finally:
                 loop.close()
 
-        # Start the tests thread
-        thread = threading.Thread(target=run_tests)
+        # Start thread
+        thread = threading.Thread(target=run_auto_login_accs)
         thread.daemon = True
         thread.start()

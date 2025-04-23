@@ -10,6 +10,10 @@ from .browser_manager import BrowserManager
 from .session_handler import SessionHandler
 
 
+
+
+
+#-----------------------------class---------------------------------------------------------------#
 class AutomationAction:
     """
     Base class for automation actions.
@@ -31,6 +35,10 @@ class AutomationAction:
         raise NotImplementedError("Subclasses must implement execute()")
 
 
+
+
+
+#-----------------------------class---------------------------------------------------------------#
 class LikeAction(AutomationAction):
     """Automation action for liking Facebook posts."""
 
@@ -121,6 +129,11 @@ class LikeAction(AutomationAction):
             return False
 
 
+
+
+
+
+#-----------------------------class---------------------------------------------------------------#
 class CommentAction(AutomationAction):
     """Automation action for commenting on Facebook posts."""
 
@@ -241,6 +254,11 @@ class CommentAction(AutomationAction):
             await asyncio.sleep(random.uniform(0.05, 0.3))
 
 
+
+
+
+
+#-----------------------------class---------------------------------------------------------------#
 class AutomationHandler:
     """
     Manages and executes automation actions.

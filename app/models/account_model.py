@@ -1,6 +1,3 @@
-"""
-Account model to manage Facebook accounts data.
-"""
 
 import json
 import os
@@ -24,7 +21,7 @@ class AccountModel:
         self.next_id = self._get_next_id()
 
     def load_accounts(self) -> Dict[str, Dict[str, Any]]:
-        """Load accounts from a JSON file."""
+        
         if os.path.exists(self.accounts_file):
             try:
                 with open(self.accounts_file, "r") as f:
@@ -34,7 +31,7 @@ class AccountModel:
         return {}
 
     def save_accounts(self) -> bool:
-        """Save accounts to a JSON file."""
+        
         try:
             with open(self.accounts_file, "w") as f:
                 json.dump(self.accounts, f, indent=4)
@@ -50,13 +47,13 @@ class AccountModel:
         max_id = max(int(account_id) for account_id in self.accounts.keys())
         return max_id + 1
 
-    def add_account(self, user: str, password: str) -> Optional[str]:
-        """Add a new account."""
+    def add_account(self, user: str, password: str) -> tuple[Optional[str], Optional[str]]:
+        
         if not user or not password:
-            return None
+            return None, "Username and Password cannot be empty"
 
         if any(acc.get("user") == user for acc in self.accounts.values()):
-            return None
+            return None, f"Username {user} already exists"
 
         try:
             account_id = f"{self.next_id:03d}"
@@ -75,13 +72,13 @@ class AccountModel:
             }
             self.accounts[account_id] = account_data
             self.save_accounts()
-            return account_id
+            return account_id, None
         except Exception as e:
             print(f"Error adding account: {str(e)}")
-            return None
+            return None, f"Failed to add account: {str(e)}"
 
     def update_account(self, account_id: str, user: str, password: str) -> bool:
-        """Update an existing account."""
+        
         if account_id not in self.accounts:
             return False
 
@@ -98,7 +95,7 @@ class AccountModel:
         return True
 
     def delete_account(self, account_id: str) -> bool:
-        """Delete an account."""
+        
         if account_id not in self.accounts:
             return False
         del self.accounts[account_id]
@@ -106,11 +103,11 @@ class AccountModel:
         return True
 
     def get_account(self, account_id: str) -> Optional[Dict[str, Any]]:
-        """Get a single account."""
+        
         return self.accounts.get(account_id)
 
     def get_all_accounts(self) -> Dict[str, Dict[str, Any]]:
-        """Get all accounts."""
+        
         return self.accounts
 
     def update_account_status(

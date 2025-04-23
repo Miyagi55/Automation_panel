@@ -20,7 +20,7 @@ class WorkflowModel:
     Model for storing and retrieving workflow data.
     """
 
-    def __init__(self, workflows_file: str = "workflows.json"):
+    def __init__(self, workflows_file: str = "data/workflows.json"):
         self.workflows_file = workflows_file
         self.workflows = self.load_workflows()
 
@@ -71,6 +71,9 @@ class WorkflowModel:
         return self.save_workflows()
 
 
+
+
+##------------------------------class-----------------------------------------------------------!!##
 class AutomationController:
     """
     Controller for automation operations.
@@ -90,6 +93,9 @@ class AutomationController:
         self.running = False
         self.stop_requested = False
 
+
+
+#--------------Manage Workflows---------------------------------------!!!!!!!!!!!!!!
     def save_workflow(
         self, name: str, actions: Dict[str, dict], accounts: List[str]
     ) -> bool:
@@ -138,6 +144,11 @@ class AutomationController:
         """Get a single workflow."""
         return self.workflow_model.get_workflow(name)
 
+
+
+
+
+#---------Automation------------------------------------------------!!!!!!!!!!!!!!!
     def start_automation(
         self, selected_workflows: List[str], interval: int, randomize: bool
     ) -> bool:
