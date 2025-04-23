@@ -2,15 +2,18 @@ name: PyInstaller Auto-Release
 
 on:
   push:
-    branches:
-      - master  # trigger on master
+    branches: [master]
 
 permissions:
   contents: write
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
 
     steps:
       - uses: actions/checkout@v4
@@ -30,18 +33,41 @@ jobs:
           pyinstaller --noconfirm --onefile app.py --name AutomationPanel
 
       - name: Rename binary
+        shell: bash
         run: |
-          TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
-          echo "RELEASE_NAME=build-${TIMESTAMP}" >> $GITHUB_ENV
-          mkdir release
-          mv dist/AutomationPanel release/AutomationPanel-linux
+          mkdir upload
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            mv dist/AutomationPanel.exe upload/AutomationPanel-windows.exe
+          else
+            mv dist/AutomationPanel upload/AutomationPanel-linux
+          fi
 
-      - name: Create GitHub Release (auto-named)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ runner.os }}
+          path: upload/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binaries-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Set release name
+        id: rel
+        run: echo "name=build-$(date +'%Y%m%d-%H%M%S')" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ env.RELEASE_NAME }}
-          tag_name: ${{ env.RELEASE_NAME }}
+          tag_name: ${{ steps.rel.outputs.name }}
+          name: ${{ steps.rel.outputs.name }}
           prerelease: true
-          files: release/*
+          files: release-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
