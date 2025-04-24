@@ -149,9 +149,6 @@ class LikeAction(AutomationAction):
             # Wait to ensure the like is registered
             await asyncio.sleep(3)
 
-            # Take a screenshot as proof
-            await page.screenshot(path=f"{user_data_dir}/like_success.png")
-
             if created_browser:
                 await browser.close()
             return True
@@ -267,7 +264,7 @@ class CommentAction(AutomationAction):
 
             if not comment_field:
                 log_func(f"Could not find comment field for account {account_id}")
-                await page.screenshot(path=f"{user_data_dir}/comment_failed.png")
+                
                 if created_browser:
                     await browser.close()
                 return False
@@ -284,9 +281,6 @@ class CommentAction(AutomationAction):
 
             # Wait to ensure the comment is posted
             await asyncio.sleep(5)
-
-            # Take a screenshot as proof
-            await page.screenshot(path=f"{user_data_dir}/comment_success.png")
 
             if created_browser:
                 await browser.close()
