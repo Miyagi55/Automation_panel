@@ -67,9 +67,12 @@ class AccountController:
         user = account["user"]
         success = self.account_model.delete_account(account_id)
 
-        if success:
+        if success[0]:
             logger.info(
                 f"Deleted account: {user} (ID: {account_id}, Total: {len(self.account_model.accounts)})"
+            )
+            logger.info(
+                f"Deleted session: {success[1]}"
             )
             if self.update_ui_callback:
                 self.update_ui_callback()
