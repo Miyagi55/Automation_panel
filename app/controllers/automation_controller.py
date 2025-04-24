@@ -15,6 +15,10 @@ from app.models.playwright.automation_handler import AutomationHandler
 from app.utils.logger import logger
 
 
+
+
+
+#------------------------------class-----------------------------------------------------------#
 class WorkflowModel:
     """
     Model for storing and retrieving workflow data.
@@ -73,7 +77,9 @@ class WorkflowModel:
 
 
 
-##------------------------------class-----------------------------------------------------------!!##
+
+
+#------------------------------class-----------------------------------------------------------#
 class AutomationController:
     """
     Controller for automation operations.
@@ -95,7 +101,8 @@ class AutomationController:
 
 
 
-#--------------Manage Workflows---------------------------------------!!!!!!!!!!!!!!
+
+    #--------------Manage Workflows---------------------------------------#
     def save_workflow(
         self, name: str, actions: Dict[str, dict], accounts: List[str]
     ) -> bool:
@@ -148,7 +155,7 @@ class AutomationController:
 
 
 
-#---------Automation------------------------------------------------!!!!!!!!!!!!!!!
+    #---------Automation------------------------------------------------#
     def start_automation(
         self, selected_workflows: List[str], interval: int, randomize: bool
     ) -> bool:
@@ -172,7 +179,7 @@ class AutomationController:
         self.stop_requested = False
 
         thread = threading.Thread(
-            target=self._run_automation, args=(selected_workflows, interval, randomize)
+            target=self._run_automation, args=(selected_workflows, interval, randomize, False)
         )
         thread.daemon = True
         thread.start()
@@ -181,6 +188,8 @@ class AutomationController:
             f"Started automation for {len(selected_workflows)} workflows with interval {interval}s"
         )
         return True
+
+
 
     def stop_automation(self) -> bool:
         """Stop the currently running automation."""
@@ -192,13 +201,53 @@ class AutomationController:
         logger.info("Stopping automation...")
         return True
 
+
+
     def _run_automation(
-        self, selected_workflows: List[str], interval: int, randomize: bool
+        self, selected_workflows: List[str], interval: int, randomize: bool, repeat: bool = False
     ) -> None:
         """Run the automation loop for selected workflows."""
         try:
-            while not self.stop_requested:
-                for workflow_name in selected_workflows:
+            if repeat:
+                while not self.stop_requested:
+                    for i, workflow_name in enumerate(selected_workflows):
+                        if self.stop_requested:
+                            break
+
+                        workflow_data = self.workflow_model.get_workflow(workflow_name)
+                        if not workflow_data:
+                            continue
+
+                        # Update workflow status
+                        logger.info(f"Running workflow: {workflow_name}")
+                        if self.progress_callback:
+                            self.progress_callback(workflow_name, 0.0)
+
+                        # Run the workflow
+                        self._execute_workflow(workflow_name, workflow_data)
+
+                        # Don't wait after the last workflow if stopping
+                        if self.stop_requested:
+                            break
+
+                        # Skip delay if this is the last workflow
+                        if i < len(selected_workflows) - 1:
+                            # Wait before the next workflow
+                            delay = interval
+                            if randomize:
+                                # Randomize by +/- 20%
+                                delay = int(interval * (0.8 + 0.4 * random.random()))
+
+                            logger.info(f"Waiting {delay}s before next workflow")
+
+                            # Wait in small increments to allow for quick stopping
+                            start_time = time.time()
+                            while time.time() - start_time < delay:
+                                if self.stop_requested:
+                                    break
+                                time.sleep(1)
+            else:
+                for i, workflow_name in enumerate(selected_workflows):
                     if self.stop_requested:
                         break
 
@@ -218,23 +267,31 @@ class AutomationController:
                     if self.stop_requested:
                         break
 
-                    # Wait before the next workflow
-                    delay = interval
-                    if randomize:
-                        # Randomize by +/- 20%
-                        delay = int(interval * (0.8 + 0.4 * random.random()))
+                    # Skip delay if this is the last workflow
+                    if i < len(selected_workflows) - 1:
+                        # Wait before the next workflow
+                        delay = interval
+                        if randomize:
+                            # Randomize by +/- 20%
+                            delay = int(interval * (0.8 + 0.4 * random.random()))
 
-                    logger.info(f"Waiting {delay}s before next workflow")
+                        logger.info(f"Waiting {delay}s before next workflow")
 
-                    # Wait in small increments to allow for quick stopping
-                    start_time = time.time()
-                    while time.time() - start_time < delay:
-                        if self.stop_requested:
-                            break
-                        time.sleep(1)
+                        # Wait in small increments to allow for quick stopping
+                        start_time = time.time()
+                        while time.time() - start_time < delay:
+                            if self.stop_requested:
+                                break
+                            time.sleep(1)
+        except KeyboardInterrupt:
+            logger.info("Caught KeyboardInterrupt, cleaning up...")
+            self.cleanup()
         finally:
             self.running = False
             logger.info("Automation stopped")
+
+
+
 
     def _execute_workflow(
         self, workflow_name: str, workflow_data: Dict[str, Any]
@@ -263,6 +320,11 @@ class AutomationController:
                     )
                 )
             finally:
+                # Cancel pending tasks and close the loop
+                tasks = [task for task in asyncio.all_tasks(loop) if task is not asyncio.current_task(loop)]
+                for task in tasks:
+                    task.cancel()
+                loop.run_until_complete(loop.shutdown_asyncgens())
                 loop.close()
 
         # Run the workflow in a separate thread
@@ -270,3 +332,28 @@ class AutomationController:
         workflow_thread.daemon = True
         workflow_thread.start()
         workflow_thread.join()  # Wait for workflow to complete
+
+
+
+
+    def cleanup(self):
+        """Clean up resources on program termination."""
+        loop = asyncio.get_event_loop()
+        tasks = [task for task in asyncio.all_tasks(loop) if task is not asyncio.current_task(loop)]
+        for task in tasks:
+            task.cancel()
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.close()
+        logger.info("Cleaned up asyncio tasks and loop")
+
+        # Close any open browser contexts and stop Playwright instances
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(
+                self.automation_handler.session_handler.batch_processor.cleanup(logger.info)
+            )
+        finally:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.close()
+        logger.info("Completed cleanup of browser contexts and Playwright instances")
