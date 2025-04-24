@@ -1,24 +1,25 @@
 # app/utils/config.py
+import sys
 from pathlib import Path
 
+import __main__
 
-#Configurable CONSTANTS
+# Configurable CONSTANTS
 ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS = 60  #  Edit as needed
 LINK_LOGIN = "https://www.facebook.com/login"
 
+
 def get_project_root() -> Path:
-    """Find the project root by looking for a known file (e.g., pyproject.toml)."""
-    current = Path(__file__).resolve()
-    while current != current.parent:  # Stop at filesystem root
-        if (current / "pyproject.toml").exists():  # Or another marker file
-            return current
-        current = current.parent
-    raise RuntimeError("Could not find project root")
+    if getattr(sys, "frozen", False):
+        # Running in PyInstaller bundle
+        return Path(sys.executable).resolve().parent
+    else:
+        # Running in development
+        return Path(__main__.__file__).resolve().parent
+
 
 ROOT = get_project_root()
 DATA_DIR = ROOT / "data"
 SESSIONS = DATA_DIR / "sessions"
 LOG_DIR = DATA_DIR / "logs"
 ACCOUNTS_FILE = DATA_DIR / "accounts.json"
-
-
