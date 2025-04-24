@@ -4,14 +4,11 @@ Automation handler for executing Facebook automation tasks.
 
 import asyncio
 import random
+import re
 from typing import Any, Callable, Dict, Optional
 
 from .browser_manager import BrowserManager
 from .session_handler import SessionHandler
-
-
-
-
 
 
 #-----------------------------class---------------------------------------------------------------#
@@ -35,10 +32,6 @@ class AutomationAction:
     ) -> bool:
         """Execute the automation action."""
         raise NotImplementedError("Subclasses must implement execute()")
-
-
-
-
 
 
 #-----------------------------class---------------------------------------------------------------#
@@ -72,6 +65,7 @@ class LikeAction(AutomationAction):
         log_func(f"Starting Like action for account {account_id} on {url}")
 
         created_browser = False
+        playwright = None
         try:
             # Import here to allow for lazy loading
             from patchright.async_api import async_playwright
@@ -80,48 +74,121 @@ class LikeAction(AutomationAction):
             if browser and not (hasattr(browser, '_closed') and browser._closed):
                 log_func(f"Reusing existing browser context for account {account_id}")
             else:
-                async with async_playwright() as p:
-                    browser = await p.chromium.launch_persistent_context(
-                        no_viewport=True,
-                        channel="chrome",
-                        headless=False,
-                        user_data_dir=user_data_dir,
-                    )
-                    created_browser = True
-                    log_func(f"Created new browser context for account {account_id}")
+                playwright = await async_playwright().__aenter__()
+                browser = await playwright.chromium.launch_persistent_context(
+                    no_viewport=True,
+                    channel="chrome",
+                    headless=False,
+                    user_data_dir=user_data_dir,
+                )
+                created_browser = True
+                log_func(f"Created new browser context for account {account_id}")
 
             page = await browser.new_page()
             await page.goto(url, wait_until="load", timeout=60000)
             await page.wait_for_load_state("domcontentloaded")
             log_func(f"Navigated to post URL in new tab for account {account_id}")
 
-            # Wait for potential overlays to disappear (e.g., login prompts, ads)
-            try:
-                await page.wait_for_selector(
-                    'div[role="dialog"], div[class*="overlay"], div[class*="popup"]',
-                    state="detached",
-                    timeout=10000
-                )
-                log_func(f"No overlays detected for account {account_id}")
-            except:
-                log_func(f"Overlay wait timeout, proceeding for account {account_id}")
+            # Wait for page to stabilize
+            await asyncio.sleep(2.0)
 
-            # Find the like button using precise selector
-            like_button_selector = 'div[aria-label="Like"][role="button"]'
-            try:
-                like_button = await page.wait_for_selector(
-                    like_button_selector, timeout=10000, state="visible"
+            # Scroll to ensure the post or overlay is in view
+            await page.evaluate("window.scrollBy(0, 500)")
+            await asyncio.sleep(1.0)  # Wait for scroll to settle
+
+            # Try to find the like button within the post overlay or page
+            like_button = None
+            selectors = [
+                {'type': 'aria-label', 'value': r'^(Like|Me gusta)$', 'scope': 'overlay'},
+                {'type': 'aria-label', 'value': r'^(Like|Me gusta)$', 'scope': 'page'},
+                {'type': 'data-testid', 'value': 'UFI2ReactionLink/like', 'scope': 'page'},
+            ]
+
+            for selector in selectors:
+                try:
+                    if selector['type'] == 'aria-label':
+                        # Define the scope (overlay or full page)
+                        if selector['scope'] == 'overlay':
+                            # Narrow selector to post-specific overlay
+                            overlay = await page.query_selector('div[role="dialog"]:has([aria-label="Like"]), div[role="dialog"]:has([aria-label="React"])')
+                            if not overlay:
+                                log_func(f"No post overlay found for account {account_id}, skipping overlay scope")
+                                continue
+                            # Log overlay details for debugging
+                            overlay_attrs = await overlay.evaluate(
+                                """(el) => ({
+                                    class: el.className,
+                                    role: el.getAttribute('role'),
+                                    ariaLabel: el.getAttribute('aria-label')
+                                })"""
+                            )
+                            log_func(f"Post overlay attributes: {overlay_attrs}")
+                            # Wait for overlay elements to stabilize
+                            await asyncio.sleep(1.0)
+                            buttons = await overlay.query_selector_all('[aria-label]')
+                        else:
+                            buttons = await page.query_selector_all('[aria-label]')
+                        
+                        for btn in buttons:
+                            try:
+                                # Use JavaScript to reliably fetch aria-label
+                                aria_label = await btn.evaluate(
+                                    """(el) => el.getAttribute('aria-label')"""
+                                )
+                                # Fetch button HTML for debugging
+                                button_html = await btn.evaluate(
+                                    """(el) => el.outerHTML"""
+                                )
+                                log_func(f"Evaluating button with aria-label: '{aria_label}' in {selector['scope']} scope, HTML: {button_html[:100]}...")
+                                if aria_label and re.match(selector['value'], aria_label):
+                                    # Retry visibility check up to 5 times
+                                    for attempt in range(5):
+                                        if await btn.is_visible():
+                                            like_button = btn
+                                            log_func(f"Found like button with aria-label '{aria_label}' in {selector['scope']} scope")
+                                            break
+                                        log_func(f"Button with aria-label '{aria_label}' not visible in {selector['scope']} scope, retry {attempt + 1}/5")
+                                        await asyncio.sleep(1.5)
+                                    if like_button:
+                                        break
+                                    log_func(f"Button with aria-label '{aria_label}' failed visibility check in {selector['scope']} scope")
+                            except Exception as e:
+                                log_func(f"Error evaluating button in {selector['scope']} scope: {str(e)}")
+                                continue
+                    elif selector['type'] == 'data-testid':
+                        button = await page.query_selector(f'[data-testid="{selector["value"]}"]')
+                        if button and await button.is_visible():
+                            like_button = button
+                            log_func(f"Found like button with data-testid: {selector['value']}")
+                            break
+
+                    if like_button:
+                        break
+                except Exception as e:
+                    log_func(f"Failed to find like button with {selector['type']} in {selector['scope']} scope: {str(e)}")
+                    continue
+
+            if not like_button:
+                # Debug: Log all aria-labels in the overlay and page
+                overlay_aria_labels = []
+                overlay = await page.query_selector('div[role="dialog"]:has([aria-label="Like"]), div[role="dialog"]:has([aria-label="React"])')
+                if overlay:
+                    overlay_aria_labels = await overlay.evaluate(
+                        """(el) => Array.from(el.querySelectorAll('[aria-label]')).map(e => e.getAttribute('aria-label'))"""
+                    )
+                page_aria_labels = await page.evaluate(
+                    """() => Array.from(document.querySelectorAll('[aria-label]')).map(el => el.getAttribute('aria-label'))"""
                 )
-                if not like_button or not await like_button.is_visible() or not await like_button.is_enabled():
-                    log_func(f"Like button not found, not visible, or not enabled for account {account_id}")
-                    if created_browser:
-                        await browser.close()
-                    return False
-            except Exception as e:
-                log_func(f"Could not find like button for account {account_id}: {str(e)}")
+                log_func(f"Overlay aria-labels: {overlay_aria_labels}")
+                log_func(f"Page aria-labels: {page_aria_labels}")
+                log_func(f"Could not find Like button for account {account_id} - check overlay or selector")
                 if created_browser:
                     await browser.close()
                 return False
+
+            # Focus the button to ensure it’s interactive
+            await like_button.focus()
+            log_func(f"Focused like button for account {account_id}")
 
             # Add a delay before clicking
             await asyncio.sleep(random.uniform(2.0, 5.0))
@@ -155,20 +222,20 @@ class LikeAction(AutomationAction):
 
         except Exception as e:
             log_func(f"Error during Like action for account {account_id}: {str(e)}")
-            if created_browser and browser and not (hasattr(browser, '_closed') and browser._closed):
-                await browser.close()
             return False
         finally:
             if created_browser and browser and not (hasattr(browser, '_closed') and browser._closed):
                 try:
                     await browser.close()
                     log_func(f"Ensured browser closed for account {account_id}")
-                except:
-                    log_func(f"Error closing browser for account {account_id}")
-
-
-
-
+                except Exception as e:
+                    log_func(f"Error closing browser for account {account_id}: {str(e)}")
+            if playwright:
+                try:
+                    await playwright.__aexit__(None, None, None)
+                    log_func(f"Closed Playwright instance for account {account_id}")
+                except Exception as e:
+                    log_func(f"Error closing Playwright instance for account {account_id}: {str(e)}")
 
 
 #-----------------------------class---------------------------------------------------------------#
@@ -222,6 +289,7 @@ class CommentAction(AutomationAction):
         log_func(f"Starting Comment action for account {account_id} on {url}")
 
         created_browser = False
+        playwright = None
         try:
             # Import here to allow for lazy loading
             from patchright.async_api import async_playwright
@@ -230,15 +298,15 @@ class CommentAction(AutomationAction):
             if browser and not (hasattr(browser, '_closed') and browser._closed):
                 log_func(f"Reusing existing browser context for account {account_id}")
             else:
-                async with async_playwright() as p:
-                    browser = await p.chromium.launch_persistent_context(
-                        no_viewport=True,
-                        channel="chrome",
-                        headless=False,
-                        user_data_dir=user_data_dir,
-                    )
-                    created_browser = True
-                    log_func(f"Created new browser context for account {account_id}")
+                playwright = await async_playwright().__aenter__()
+                browser = await playwright.chromium.launch_persistent_context(
+                    no_viewport=True,
+                    channel="chrome",
+                    headless=False,
+                    user_data_dir=user_data_dir,
+                )
+                created_browser = True
+                log_func(f"Created new browser context for account {account_id}")
 
             page = await browser.new_page()
             await page.goto(url, wait_until="load", timeout=60000)
@@ -264,7 +332,6 @@ class CommentAction(AutomationAction):
 
             if not comment_field:
                 log_func(f"Could not find comment field for account {account_id}")
-                
                 if created_browser:
                     await browser.close()
                 return False
@@ -288,20 +355,20 @@ class CommentAction(AutomationAction):
 
         except Exception as e:
             log_func(f"Error during Comment action for account {account_id}: {str(e)}")
-            if created_browser and browser and not (hasattr(browser, '_closed') and browser._closed):
-                await browser.close()
             return False
         finally:
             if created_browser and browser and not (hasattr(browser, '_closed') and browser._closed):
                 try:
                     await browser.close()
                     log_func(f"Ensured browser closed for account {account_id}")
-                except:
-                    log_func(f"Error closing browser for account {account_id}")
-
-
-
-
+                except Exception as e:
+                    log_func(f"Error closing browser for account {account_id}: {str(e)}")
+            if playwright:
+                try:
+                    await playwright.__aexit__(None, None, None)
+                    log_func(f"Closed Playwright instance for account {account_id}")
+                except Exception as e:
+                    log_func(f"Error closing Playwright instance for account {account_id}: {str(e)}")
 
 
 #-----------------------------class---------------------------------------------------------------#
@@ -317,8 +384,7 @@ class AutomationHandler:
             # Add more actions as needed
         }
         self.session_handler = SessionHandler()
-
-
+        self.playwright = None
 
     async def execute_workflow(
         self,
@@ -362,70 +428,84 @@ class AutomationHandler:
         total_operations = len(account_ids) * len(action_configs)
         completed_operations = 0
 
-        # Execute each action on each account
-        for account_id in account_ids:
-            account_data = accounts[account_id]
+        try:
+            # Execute each action on each account
+            for account_id in account_ids:
+                account_data = accounts[account_id]
 
-            # Check if the account is logged in without forcing login
-            result = await self.session_handler.open_sessions(
-                account_id, log_func, keep_browser_open_seconds=0, skip_simulation=True
-            )
-            log_func(f"Session result for account {account_id}: {result}")
-            is_logged_in, sim_success = result.get(account_id, (False, False))
+                # Check if the account is logged in without forcing login
+                result = await self.session_handler.open_sessions(
+                    account_id, log_func, keep_browser_open_seconds=0, skip_simulation=True
+                )
+                log_func(f"Session result for account {account_id}: {result}")
+                is_logged_in, sim_success = result.get(account_id, (False, False))
 
-            # Retrieve browser context from BatchProcessor
-            browser = self.session_handler.batch_processor.get_browser_context(account_id)
-            if not browser:
-                log_func(f"No browser context available for account {account_id}")
-                is_logged_in = False
+                # Retrieve browser context from BatchProcessor
+                browser = self.session_handler.batch_processor.get_browser_context(account_id)
+                if not browser:
+                    log_func(f"No browser context available for account {account_id}")
+                    is_logged_in = False
 
-            if not is_logged_in:
-                log_func(f"Error: Account {account_id} is not logged in, skipping actions")
-                if browser and not (hasattr(browser, '_closed') and browser._closed):
-                    try:
-                        await browser.close()
-                        log_func(f"Closed browser for account {account_id}")
-                    except:
-                        log_func(f"Error closing browser for account {account_id}")
-                completed_operations += len(action_configs)
-                if progress_callback:
-                    progress_callback(completed_operations / total_operations)
-                continue
-
-            # Execute each action
-            for action_name, action_config in action_configs.items():
-                if action_name not in self.actions:
-                    log_func(f"Unknown action: {action_name}, skipping")
-                    completed_operations += 1
+                if not is_logged_in:
+                    log_func(f"Error: Account {account_id} is not logged in, skipping actions")
+                    if browser and not (hasattr(browser, '_closed') and browser._closed):
+                        try:
+                            await browser.close()
+                            log_func(f"Closed browser for account {account_id}")
+                        except Exception as e:
+                            log_func(f"Error closing browser for account {account_id}: {str(e)}")
+                    completed_operations += len(action_configs)
                     if progress_callback:
                         progress_callback(completed_operations / total_operations)
                     continue
 
-                action = self.actions[action_name]
-                log_func(f"Executing {action_name} for account {account_id}")
+                # Execute each action
+                for action_name, action_config in action_configs.items():
+                    if action_name not in self.actions:
+                        log_func(f"Unknown action: {action_name}, skipping")
+                        completed_operations += 1
+                        if progress_callback:
+                            progress_callback(completed_operations / total_operations)
+                        continue
 
-                success = await action.execute(
-                    account_id, account_data, action_config, log_func, browser
-                )
+                    action = self.actions[action_name]
+                    log_func(f"Executing {action_name} for account {account_id}")
 
-                log_func(
-                    f"{action_name} {'succeeded' if success else 'failed'} for account {account_id}"
-                )
+                    success = await action.execute(
+                        account_id, account_data, action_config, log_func, browser
+                    )
 
-                completed_operations += 1
-                if progress_callback:
-                    progress_callback(completed_operations / total_operations)
+                    log_func(
+                        f"{action_name} {'succeeded' if success else 'failed'} for account {account_id}"
+                    )
 
-                # Add a random delay between actions
-                await asyncio.sleep(random.uniform(2.0, 5.0))
+                    completed_operations += 1
+                    if progress_callback:
+                        progress_callback(completed_operations / total_operations)
 
-            # Close the browser context after all actions for this account
-            if browser and not (hasattr(browser, '_closed') and browser._closed):
+                    # Add a random delay between actions
+                    await asyncio.sleep(random.uniform(2.0, 5.0))
+
+                # Close the browser context after all actions for this account
+                if browser and not (hasattr(browser, '_closed') and browser._closed):
+                    try:
+                        await browser.close()
+                        log_func(f"Closed browser for account {account_id}")
+                    except Exception as e:
+                        log_func(f"Error closing browser for account {account_id}: {str(e)}")
+
+        except Exception as e:
+            log_func(f"Error during workflow {workflow_name}: {str(e)}")
+            return False
+        finally:
+            # Ensure all Playwright instances are closed
+            if self.playwright:
                 try:
-                    await browser.close()
-                    log_func(f"Closed browser for account {account_id}")
-                except:
-                    log_func(f"Error closing browser for account {account_id}")
+                    await self.playwright.__aexit__(None, None, None)
+                    log_func(f"Closed Playwright instance for workflow {workflow_name}")
+                except Exception as e:
+                    log_func(f"Error closing Playwright instance for workflow {workflow_name}: {str(e)}")
+                self.playwright = None
 
         log_func(f"Completed workflow: {workflow_name}")
         return True
