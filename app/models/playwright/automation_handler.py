@@ -51,6 +51,7 @@ class LikeAction(AutomationAction):
     ) -> bool:
         """Execute the like action on a post."""
         url = action_data.get("link", "")
+        debug = action_data.get("debug", False)
         if not url:
             log_func(f"No URL provided for Like action on account {account_id}")
             return False
@@ -85,103 +86,92 @@ class LikeAction(AutomationAction):
                 log_func(f"Created new browser context for account {account_id}")
 
             page = await browser.new_page()
-            await page.goto(url, wait_until="load", timeout=60000)
-            await page.wait_for_load_state("domcontentloaded")
-            log_func(f"Navigated to post URL in new tab for account {account_id}")
+            try:
+                await page.goto(url, wait_until="load", timeout=60000)
+                page_title = await page.title()
+                page_url = page.url
+                log_func(f"Navigated to post URL for account {account_id}: {page_url}, Title: {page_title}")
+            except Exception as e:
+                log_func(f"Navigation failed for account {account_id}: {str(e)}")
+                return False
 
-            # Wait for page to stabilize
-            await asyncio.sleep(2.0)
-
-            # Scroll to ensure the post or overlay is in view
-            await page.evaluate("window.scrollBy(0, 500)")
-            await asyncio.sleep(1.0)  # Wait for scroll to settle
-
-            # Try to find the like button within the post overlay or page
-            like_button = None
-            selectors = [
-                {'type': 'aria-label', 'value': r'^(Like|Me gusta)$', 'scope': 'overlay'},
-                {'type': 'aria-label', 'value': r'^(Like|Me gusta)$', 'scope': 'page'},
-                {'type': 'data-testid', 'value': 'UFI2ReactionLink/like', 'scope': 'page'},
-            ]
-
-            for selector in selectors:
+            # Wait for post overlay with retry
+            log_func(f"Waiting for post overlay to load for account {account_id}")
+            overlay = None
+            for attempt in range(3):
                 try:
-                    if selector['type'] == 'aria-label':
-                        # Define the scope (overlay or full page)
-                        if selector['scope'] == 'overlay':
-                            # Narrow selector to post-specific overlay
-                            overlay = await page.query_selector('div[role="dialog"]:has([aria-label="Like"]), div[role="dialog"]:has([aria-label="React"])')
-                            if not overlay:
-                                log_func(f"No post overlay found for account {account_id}, skipping overlay scope")
-                                continue
-                            # Log overlay details for debugging
-                            overlay_attrs = await overlay.evaluate(
-                                """(el) => ({
-                                    class: el.className,
-                                    role: el.getAttribute('role'),
-                                    ariaLabel: el.getAttribute('aria-label')
-                                })"""
-                            )
-                            log_func(f"Post overlay attributes: {overlay_attrs}")
-                            # Wait for overlay elements to stabilize
-                            await asyncio.sleep(1.0)
-                            buttons = await overlay.query_selector_all('[aria-label]')
-                        else:
-                            buttons = await page.query_selector_all('[aria-label]')
-                        
-                        for btn in buttons:
-                            try:
-                                # Use JavaScript to reliably fetch aria-label
-                                aria_label = await btn.evaluate(
-                                    """(el) => el.getAttribute('aria-label')"""
-                                )
-                                # Fetch button HTML for debugging
-                                button_html = await btn.evaluate(
-                                    """(el) => el.outerHTML"""
-                                )
-                                log_func(f"Evaluating button with aria-label: '{aria_label}' in {selector['scope']} scope, HTML: {button_html[:100]}...")
-                                if aria_label and re.match(selector['value'], aria_label):
-                                    # Retry visibility check up to 5 times
-                                    for attempt in range(5):
-                                        if await btn.is_visible():
-                                            like_button = btn
-                                            log_func(f"Found like button with aria-label '{aria_label}' in {selector['scope']} scope")
-                                            break
-                                        log_func(f"Button with aria-label '{aria_label}' not visible in {selector['scope']} scope, retry {attempt + 1}/5")
-                                        await asyncio.sleep(1.5)
-                                    if like_button:
-                                        break
-                                    log_func(f"Button with aria-label '{aria_label}' failed visibility check in {selector['scope']} scope")
-                            except Exception as e:
-                                log_func(f"Error evaluating button in {selector['scope']} scope: {str(e)}")
-                                continue
-                    elif selector['type'] == 'data-testid':
-                        button = await page.query_selector(f'[data-testid="{selector["value"]}"]')
-                        if button and await button.is_visible():
-                            like_button = button
-                            log_func(f"Found like button with data-testid: {selector['value']}")
-                            break
-
-                    if like_button:
+                    overlay = await page.wait_for_selector(
+                        'div[role="dialog"]:has([aria-label="Like"]), div[role="dialog"]:has([aria-label="React"])',
+                        timeout=10000
+                    )
+                    if overlay:
                         break
+                    log_func(f"Overlay not found on attempt {attempt + 1}/3 for account {account_id}")
+                    await asyncio.sleep(2.0)
                 except Exception as e:
-                    log_func(f"Failed to find like button with {selector['type']} in {selector['scope']} scope: {str(e)}")
-                    continue
+                    log_func(f"Overlay wait failed on attempt {attempt + 1}/3 for account {account_id}: {str(e)}")
+                    await asyncio.sleep(2.0)
+
+            if not overlay:
+                if debug:
+                    log_func(f"No post overlay found for account {account_id}")
+                log_func(f"Could not find Like button in overlay for account {account_id}")
+                if created_browser:
+                    await browser.close()
+                return False
+
+            # Additional wait for components to render (e.g., images)
+            await asyncio.sleep(6.0)
+            log_func(f"Post overlay loaded for account {account_id}")
+
+            # Scroll to ensure the post is in view
+            await page.evaluate("window.scrollBy(0, 500)")
+            await asyncio.sleep(3.0)
+
+            like_button = None
+            selector = {"type": "aria-label", "value": r"^(Like|Me gusta)$", "scope": "overlay"}
+
+            try:
+                await asyncio.sleep(3.0)
+                buttons = await overlay.query_selector_all("[aria-label]")
+
+                for btn in buttons:
+                    try:
+                        aria_label = await btn.evaluate("""(el) => el.getAttribute('aria-label')""")
+                        if debug:
+                            button_html = await btn.evaluate("""(el) => el.outerHTML""")
+                            log_func(
+                                f"Evaluating button with aria-label: '{aria_label}' in overlay scope, HTML: {button_html[:100]}..."
+                            )
+                        if aria_label and re.match(selector["value"], aria_label):
+                            for attempt in range(5):
+                                if await btn.is_visible():
+                                    like_button = btn
+                                    log_func(f"Found like button with aria-label '{aria_label}' in overlay scope")
+                                    break
+                                if debug:
+                                    log_func(
+                                        f"Button with aria-label '{aria_label}' not visible in overlay scope, retry {attempt + 1}/5"
+                                    )
+                                await asyncio.sleep(1.5)
+                            if like_button:
+                                break
+                            if debug:
+                                log_func(f"Button with aria-label '{aria_label}' failed visibility check in overlay scope")
+                    except Exception as e:
+                        if debug:
+                            log_func(f"Error evaluating button in overlay scope: {str(e)}")
+                        continue
+            except Exception as e:
+                log_func(f"Failed to find like button in overlay scope for account {account_id}: {str(e)}")
 
             if not like_button:
-                # Debug: Log all aria-labels in the overlay and page
-                overlay_aria_labels = []
-                overlay = await page.query_selector('div[role="dialog"]:has([aria-label="Like"]), div[role="dialog"]:has([aria-label="React"])')
-                if overlay:
+                if debug:
                     overlay_aria_labels = await overlay.evaluate(
                         """(el) => Array.from(el.querySelectorAll('[aria-label]')).map(e => e.getAttribute('aria-label'))"""
                     )
-                page_aria_labels = await page.evaluate(
-                    """() => Array.from(document.querySelectorAll('[aria-label]')).map(el => el.getAttribute('aria-label'))"""
-                )
-                log_func(f"Overlay aria-labels: {overlay_aria_labels}")
-                log_func(f"Page aria-labels: {page_aria_labels}")
-                log_func(f"Could not find Like button for account {account_id} - check overlay or selector")
+                    log_func(f"Overlay aria-labels: {overlay_aria_labels}")
+                log_func(f"Could not find Like button in overlay for account {account_id}")
                 if created_browser:
                     await browser.close()
                 return False
@@ -203,9 +193,8 @@ class LikeAction(AutomationAction):
                 except Exception as e:
                     log_func(f"Standard click failed for account {account_id} (attempt {attempt + 1}): {str(e)}")
                     if attempt < max_click_attempts - 1:
-                        await asyncio.sleep(2.0)  # Wait before retry
+                        await asyncio.sleep(2.0)
                         continue
-                    # Fallback to JavaScript click
                     parent_html = await page.evaluate(
                         "(element) => element.parentElement.outerHTML", like_button
                     )
@@ -493,6 +482,9 @@ class AutomationHandler:
                         log_func(f"Closed browser for account {account_id}")
                     except Exception as e:
                         log_func(f"Error closing browser for account {account_id}: {str(e)}")
+
+                # Add delay between accounts to reduce contention
+                await asyncio.sleep(random.uniform(5.0, 10.0))
 
         except Exception as e:
             log_func(f"Error during workflow {workflow_name}: {str(e)}")
