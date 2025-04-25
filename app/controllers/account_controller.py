@@ -233,19 +233,12 @@ class AccountController:
                             "Feed Simulated",
                             "Successful login and feed simulation"
                         )
-                    elif login_success:
-                        self.update_account_status(
-                            account_id,
-                            "Logged In",
-                            "Simulation Failed",
-                            "Logged in but feed simulation failed"
-                        )
-                    else:
+                    else:  # Modified to require both login_success and sim_success for "Logged In" status
                         self.update_account_status(
                             account_id,
                             "Login Failed",
                             "Inactive",
-                            "Failed to login or not logged in"
+                            "Failed to login or feed simulation failed"
                         )
             except Exception as e:
                 logger.error(f"Error running login sessions: {str(e)}")

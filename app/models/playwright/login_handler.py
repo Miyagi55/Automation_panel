@@ -14,6 +14,7 @@ class LoginHandler:
         password: str,
         log_func: Callable[[str], None],
         user_data_dir: str,
+        captcha_timeout: int = 60,
     ) -> bool:
         """Executes the login process and returns True if successful."""
         try:
@@ -34,19 +35,46 @@ class LoginHandler:
             # Click login button
             login_button = await page.wait_for_selector('button[name="login"]', timeout=30000)
             if login_button:
+                await asyncio.sleep(random.uniform(2.0, 5.0))
                 await login_button.click()
+                log_func(f"Clicked login button for account {account_id}")
             else:
                 log_func(f"Login button not found for account {account_id}")
                 return False
 
-            # Wait for navigation and check login state
-            await asyncio.sleep(5)
+            # Wait for page to stabilize
+            await asyncio.sleep(5.0)
+            current_url = page.url
+
+            # Check for CAPTCHA or checkpoint (2FA)
+            if "/checkpoint/" in current_url or "/two_step_verification/" in current_url:
+                log_func(f"CAPTCHA or 2FA checkpoint detected for account {account_id}. Waiting {captcha_timeout} seconds for resolution...")
+                await asyncio.sleep(captcha_timeout)
+                current_url = page.url
+                if "/checkpoint/" in current_url or "/two_step_verification/" in current_url:
+                    log_func(f"CAPTCHA/2FA checkpoint not resolved for account {account_id} after {captcha_timeout} seconds")
+                    return False
+                log_func(f"CAPTCHA/2FA checkpoint resolved for account {account_id}, proceeding to check login state")
+
+            # Verify no login form and correct URL
             login_form = await page.query_selector("input#email")
-            login_successful = login_form is None
+            if login_form:
+                log_func(f"Login form detected for account {account_id}, login failed")
+                return False
+            if page.url != "https://www.facebook.com/":
+                log_func(f"Unexpected URL for account {account_id}: {page.url}, login failed")
+                return False
 
-            log_func(f"Login {'successful' if login_successful else 'failed'} for account {account_id}")
-
-            return login_successful
+            # Check for "What's on your mind" text
+            try:
+                await page.wait_for_selector(
+                    '//div[contains(text(), "What\'s on your mind")]', timeout=30000
+                )
+                log_func(f"'What's on your mind' text found for account {account_id}, login successful")
+                return True
+            except Exception as e:
+                log_func(f"Login failed for account {account_id}: 'What's on your mind' text not found - {str(e)}")
+                return False
         except Exception as e:
             log_func(f"Error during login for account {account_id}: {str(e)}")
             return False

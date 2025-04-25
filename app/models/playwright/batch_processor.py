@@ -1,23 +1,13 @@
 import asyncio
 from typing import Any, Callable, Dict, List, Tuple, Optional
 
-
-
-
-
 class BatchProcessor:
     """Handles batch processing of multiple accounts with concurrency control."""
-
-
-
 
     def __init__(self, session_handler: Any):
         self.session_handler = session_handler
         self.browser_contexts = {}  # Store browser contexts for each account_id
         self.playwright_instances = {}  # Store Playwright instances for each account_id
-
-
-
 
     async def process_batch(
         self,
@@ -77,9 +67,6 @@ class BatchProcessor:
 
         return results
 
-
-
-
     async def auto_login_accounts(
         self,
         accounts: List[Dict[str, Any]],
@@ -93,7 +80,14 @@ class BatchProcessor:
             log_func("No chromium executable available")
             return {account["account_id"]: (False, False) for account in accounts}
 
-        async def login_task(account: Dict[str, Any], log_func: Callable[[str], None]) -> Tuple[bool, bool]:
+        # Map account_id to account details
+        account_map = {account["account_id"]: account for account in accounts}
+
+        async def login_task(account_id: str, log_func: Callable[[str], None]) -> Tuple[bool, bool, Optional[Any], Optional[Any]]:
+            account = account_map.get(account_id)
+            if not account:
+                log_func(f"Account not found for account_id {account_id}")
+                return False, False, None, None
             return await self.session_handler.login_account(
                 account["account_id"],
                 account["user"],
@@ -101,16 +95,15 @@ class BatchProcessor:
                 log_func,
             )
 
-        return await self.process_batch(
-            items=accounts,
+        # Process account_ids instead of account dicts
+        results = await self.process_batch(
+            items=list(account_map.keys()),
             process_func=login_task,
             log_func=log_func,
             batch_size=batch_size,
             concurrent_limit=concurrent_limit
         )
-
-
-
+        return results
 
     def get_browser_context(self, item: Any) -> Optional[Any]:
         """Retrieve stored browser context for an item if it's still open."""
@@ -119,25 +112,22 @@ class BatchProcessor:
             return None
         return browser
 
-
-
-
     async def cleanup(self, log_func: Callable[[str], None]):
         """Close all stored browser contexts and stop Playwright instances."""
         for item, browser in list(self.browser_contexts.items()):
             if browser and not (hasattr(browser, '_closed') and browser._closed):
                 try:
                     await browser.close()
-                    log_func(f"Closed browser context for item {item} during cleanup")
-                except:
-                    log_func(f"Error closing browser context for item {item} during cleanup")
+                    log_func(f"Closed browser context for item {item}")  # Simplified log
+                except Exception as e:
+                    log_func(f"Error closing browser context for item {item}: {str(e)}")
         for item, playwright_instance in list(self.playwright_instances.items()):
             if playwright_instance:
                 try:
                     await playwright_instance.stop()
-                    log_func(f"Stopped Playwright instance for item {item} during cleanup")
-                except:
-                    log_func(f"Error stopping Playwright instance for item {item} during cleanup")
+                    log_func(f"Stopped Playwright instance for item {item}")  # Simplified log
+                except Exception as e:
+                    log_func(f"Error stopping Playwright instance for item {item}: {str(e)}")
         self.browser_contexts.clear()
         self.playwright_instances.clear()
-        log_func("Cleared browser contexts and Playwright instances during cleanup")
+        log_func("Cleared browser contexts and Playwright instances")

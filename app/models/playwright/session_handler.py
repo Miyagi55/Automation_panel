@@ -10,16 +10,11 @@ from .batch_processor import BatchProcessor
 from .browser_manager import BrowserManager
 
 
-
-
-
 class SessionHandler:
     """
     Coordinates browser sessions and interactions.
     Delegates tasks to specialized classes for login, cookies, and batch processing.
     """
-
-
 
     def __init__(self):
         self.browser_manager = BrowserManager()
@@ -28,8 +23,6 @@ class SessionHandler:
         self.cookie_manager = CookieManager()
         self.batch_processor = BatchProcessor(self)
 
-
-
     async def login_account(
         self,
         account_id: str,
@@ -37,20 +30,21 @@ class SessionHandler:
         password: str,
         log_func: Callable[[str], None],
         keep_browser_open_seconds: int = 0,
-    ) -> Tuple[bool, bool]:
+    ) -> Tuple[bool, bool, Optional[Any], Optional[Any]]:
         """
         Login to Facebook using account credentials, followed by feed simulation.
-        Returns (login_successful, sim_success).
+        Returns (login_successful, sim_success, browser, playwright_instance).
         """
         user_data_dir = self.browser_manager.get_session_dir(account_id)
         browser = await self.browser_context.create_browser_context(account_id, log_func)
+        playwright_instance = browser._playwright_instance if browser else None
         if not browser:
             log_func(f"Failed to create browser context for account {account_id}")
-            return False, False
+            return False, False, None, None
 
         try:
             login_successful = await self.login_handler.perform_login(
-                browser, account_id, user, password, log_func, user_data_dir
+                browser, account_id, user, password, log_func, user_data_dir, captcha_timeout=60
             )
 
             # Persist cookies
@@ -62,30 +56,33 @@ class SessionHandler:
                 sim_success = await self.simulate_facebook_feed(
                     account_id, "https://www.facebook.com", browser, log_func, max_execution_time=60
                 )
+                if not sim_success:
+                    log_func(f"Feed simulation failed for account {account_id}, keeping browser open for 60 seconds")
+                    await asyncio.sleep(60)
             else:
                 log_func(f"Skipping feed simulation for account {account_id} due to login failure")
+                log_func(f"Keeping browser open for 60 seconds for manual inspection for account {account_id}")
+                await asyncio.sleep(60)
 
             # Keep browser open if requested
             if keep_browser_open_seconds > 0:
                 log_func(f"Keeping browser open for {keep_browser_open_seconds} seconds for manual testing...")
                 await asyncio.sleep(keep_browser_open_seconds)
 
-            return login_successful, sim_success
+            return login_successful, sim_success, browser, playwright_instance
         finally:
             if browser and not (hasattr(browser, '_closed') and browser._closed):
                 try:
                     await browser.close()
                     log_func(f"Closed browser for account {account_id}")
-                except:
-                    log_func(f"Error closing browser for account {account_id}")
-                if hasattr(browser, '_playwright_instance'):
+                except Exception as e:
+                    log_func(f"Error closing browser for account {account_id}: {str(e)}")
+                if playwright_instance:
                     try:
-                        await browser._playwright_instance.stop()
+                        await playwright_instance.stop()
                         log_func(f"Stopped Playwright instance for account {account_id}")
-                    except:
-                        log_func(f"Error stopping Playwright instance for account {account_id}")
-
-
+                    except Exception as e:
+                        log_func(f"Error stopping Playwright instance for account {account_id}: {str(e)}")
 
     async def auto_login_accounts(
         self,
@@ -98,9 +95,6 @@ class SessionHandler:
         Test multiple accounts, with configurable batch size and concurrency.
         """
         return await self.batch_processor.auto_login_accounts(accounts, log_func, batch_size, concurrent_limit)
-
-
-
 
     async def open_sessions(
         self,
@@ -211,8 +205,6 @@ class SessionHandler:
         )
         return results
 
-
-
     async def simulate_facebook_feed(
         self,
         account_id: str,
@@ -222,7 +214,6 @@ class SessionHandler:
         max_execution_time: int = 60,
         page: Any = None
     ) -> bool:
-        
         log_func(f"Starting feed simulation for account {account_id} at {url}")
         try:
             # Use existing page if provided, otherwise create a new one
@@ -262,7 +253,6 @@ class SessionHandler:
         finally:
             if page and not (hasattr(page, '_closed') and page._closed):
                 try:
-                    #await page.close()
-                    log_func(f"Simulation steps ended in account: {account_id}")
-                except:
-                    log_func(f"Error closing page for account {account_id}")
+                    log_func(f"Simulation steps ended for account: {account_id}")
+                except Exception as e:
+                    log_func(f"Error closing page for account {account_id}: {str(e)}")
