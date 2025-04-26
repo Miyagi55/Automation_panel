@@ -125,7 +125,7 @@ class LikeAction(AutomationAction):
             log_func(f"Post overlay loaded for account {account_id}")
 
             # Scroll to ensure the post is in view
-            await page.evaluate("window.scrollBy(0, 500)")
+            await page.evaluate("window.scrollBy(0, 300)")
             await asyncio.sleep(3.0)
 
             like_button = None
