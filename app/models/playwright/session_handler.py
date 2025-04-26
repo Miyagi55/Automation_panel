@@ -163,7 +163,7 @@ class SessionHandler:
                         # Wait for "What's on your mind" text to confirm logged-in state with feed
                         try:
                             await page.wait_for_selector(
-                                '//div[contains(text(), "What\'s on your mind")]', timeout=10000
+                                '//div[contains(text(), "What\'s on your mind")]', timeout=5000
                             )
                             log_func(f"'What's on your mind' text found for account {account_id}, indicating feed presence")
                             if not skip_simulation:

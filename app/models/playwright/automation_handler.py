@@ -11,6 +11,10 @@ from .browser_manager import BrowserManager
 from .session_handler import SessionHandler
 
 
+
+
+
+
 #-----------------------------class---------------------------------------------------------------#
 class AutomationAction:
     """
@@ -32,6 +36,13 @@ class AutomationAction:
     ) -> bool:
         """Execute the automation action."""
         raise NotImplementedError("Subclasses must implement execute()")
+
+
+
+
+
+
+
 
 
 #-----------------------------class---------------------------------------------------------------#
@@ -102,7 +113,7 @@ class LikeAction(AutomationAction):
                 try:
                     overlay = await page.wait_for_selector(
                         'div[role="dialog"]:has([aria-label="Like"]), div[role="dialog"]:has([aria-label="React"])',
-                        timeout=10000
+                        timeout=2500
                     )
                     if overlay:
                         break
@@ -121,18 +132,18 @@ class LikeAction(AutomationAction):
                 return False
 
             # Additional wait for components to render (e.g., images)
-            await asyncio.sleep(6.0)
+            await asyncio.sleep(3.0)
             log_func(f"Post overlay loaded for account {account_id}")
 
             # Scroll to ensure the post is in view
             await page.evaluate("window.scrollBy(0, 300)")
-            await asyncio.sleep(3.0)
+            await asyncio.sleep(2.0)
 
             like_button = None
             selector = {"type": "aria-label", "value": r"^(Like|Me gusta)$", "scope": "overlay"}
 
             try:
-                await asyncio.sleep(3.0)
+                await asyncio.sleep(2.0)
                 buttons = await overlay.query_selector_all("[aria-label]")
 
                 for btn in buttons:
@@ -181,7 +192,7 @@ class LikeAction(AutomationAction):
             log_func(f"Focused like button for account {account_id}")
 
             # Add a delay before clicking
-            await asyncio.sleep(random.uniform(2.0, 5.0))
+            await asyncio.sleep(random.uniform(2.0, 4.0))
 
             # Attempt to click the like button with retries
             max_click_attempts = 3
@@ -225,6 +236,11 @@ class LikeAction(AutomationAction):
                     log_func(f"Closed Playwright instance for account {account_id}")
                 except Exception as e:
                     log_func(f"Error closing Playwright instance for account {account_id}: {str(e)}")
+
+
+
+
+
 
 
 #-----------------------------class---------------------------------------------------------------#
@@ -358,6 +374,12 @@ class CommentAction(AutomationAction):
                     log_func(f"Closed Playwright instance for account {account_id}")
                 except Exception as e:
                     log_func(f"Error closing Playwright instance for account {account_id}: {str(e)}")
+
+
+
+
+
+
 
 
 #-----------------------------class---------------------------------------------------------------#
