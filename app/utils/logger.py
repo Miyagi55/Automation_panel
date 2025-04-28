@@ -8,6 +8,11 @@ from typing import Any, Callable
 
 from app.utils.config import LOG_DIR
 
+# ensure existance
+
+if not LOG_DIR.exists():
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+
 
 class Logger:
     """
