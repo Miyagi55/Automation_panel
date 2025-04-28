@@ -8,11 +8,6 @@ from typing import Any, Callable
 
 from app.utils.config import LOG_DIR
 
-# ensure existance
-
-if not LOG_DIR.exists():
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-
 
 class Logger:
     """
@@ -34,7 +29,7 @@ class Logger:
 
         # Ensure logs directory exists
         logs_dir = LOG_DIR / "logs"
-        logs_dir.mkdir(exist_ok=True)
+        logs_dir.mkdir(parents=True, exist_ok=True)
 
         # Generate log filename with date
         today = datetime.datetime.now().strftime("%Y-%m-%d")
