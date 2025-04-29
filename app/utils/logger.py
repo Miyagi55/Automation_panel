@@ -28,12 +28,11 @@ class Logger:
         self.ui_callback = None
 
         # Ensure logs directory exists
-        logs_dir = LOG_DIR / "logs"
-        logs_dir.mkdir(parents=True, exist_ok=True)
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
 
         # Generate log filename with date
         today = datetime.datetime.now().strftime("%Y-%m-%d")
-        log_file = logs_dir / f"automation_panel_{today}.log"
+        log_file = LOG_DIR / f"automation_panel_{today}.log"
 
         # Set up Python's logging
         self.logger = logging.getLogger("automation_panel")
