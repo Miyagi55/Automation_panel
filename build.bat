@@ -2,121 +2,154 @@
 setlocal
 
 REM --- Configuration ---
-set APP_NAME=AutomationPanel-windows  REM Name without quotes
+set APP_NAME=AutomationPanel-windows
 set VENV_DIR=.venv
 set MAIN_SCRIPT=app.py
 set DIST_DIR=dist
 set BUILD_DIR=build
 set SPEC_FILE=%APP_NAME%.spec
-set USER_SETUP_SCRIPT=setup_and_run.bat
 
 echo ===================================
-echo Building Facebook Automation Panel (%APP_NAME% - Directory Mode)
+echo Building & Packaging Facebook Automation Panel
 echo ===================================
 echo.
 
-REM --- Check if running from project root ---
+REM --- Ensure we're at project root ---
 if not exist "pyproject.toml" (
-    echo ERROR: This script must be run from the project root directory.
+    echo ERROR: Run this from your project root!
     goto EndFailure
 )
 
-REM --- Activate Virtual Environment (Recommended) ---
+REM --- Activate or warn about venv ---
 if exist "%VENV_DIR%\Scripts\activate.bat" (
     echo Activating virtual environment...
     call "%VENV_DIR%\Scripts\activate.bat"
 ) else (
-    echo WARNING: Virtual environment '%VENV_DIR%' not found or not activated.
-    echo          Attempting to build with system Python/packages.
-    echo          It's HIGHLY recommended to create and activate the venv first:
-    echo          python -m venv %VENV_DIR%
-    echo          %VENV_DIR%\Scripts\activate
-    echo          pip install -r requirements.txt (or uv sync)
-    echo.
-    pause
+    echo WARNING: No venv found. Using system Python.
 )
+echo.
 
-REM --- Check/Install PyInstaller ---
+REM --- Ensure uv (pyproject.toml manager) is installed ---
+echo Checking for uv...
+pip show uv > nul 2>&1
+if errorlevel 1 (
+    echo Installing uv...
+    pip install uv
+    if errorlevel 1 (
+        echo ERROR: Could not install uv.
+        goto EndFailure
+    )
+)
+echo.
+
+REM --- Sync project dependencies ---
+echo Running uv sync...
+uv sync
+if errorlevel 1 (
+    echo ERROR: uv sync failed.
+    goto EndFailure
+)
+echo.
+
+REM --- Ensure PyInstaller is installed ---
 echo Checking for PyInstaller...
 pip show pyinstaller > nul 2>&1
 if errorlevel 1 (
-    echo PyInstaller not found. Attempting to install...
+    echo Installing PyInstaller...
     pip install pyinstaller
     if errorlevel 1 (
-        echo ERROR: Failed to install PyInstaller. Check pip and internet connection.
+        echo ERROR: Could not install PyInstaller.
         goto EndFailure
     )
-    echo PyInstaller installed successfully.
-) else (
-    echo PyInstaller found.
 )
 echo.
 
-REM --- Clean specific previous artifacts ---
-echo Cleaning previous artifacts (if they exist)...
+REM --- Clean previous build artifacts ---
+echo Cleaning old dist/build/spec...
 if exist "%DIST_DIR%\%APP_NAME%" rmdir /S /Q "%DIST_DIR%\%APP_NAME%"
-if exist "%BUILD_DIR%" rmdir /S /Q "%BUILD_DIR%"
-if exist "%SPEC_FILE%" del "%SPEC_FILE%"
-echo Done cleaning.
+if exist "%BUILD_DIR%"            rmdir /S /Q "%BUILD_DIR%"
+if exist "%SPEC_FILE%"            del     "%SPEC_FILE%"
 echo.
 
-REM --- Run PyInstaller using --onedir ---
+REM --- Run PyInstaller one-dir build ---
 echo Running PyInstaller (--onedir)...
-REM Add quotes around APP_NAME when passing it as the --name argument
 pyinstaller ^
---noconsole ^
---onedir ^
---name "%APP_NAME%" ^
---hidden-import="playwright_stealth" ^
---hidden-import="patchright" ^
---hidden-import="psutil" ^
---hidden-import="tkinter" ^
---hidden-import="customtkinter" ^
-%MAIN_SCRIPT%
+  --noconsole ^
+  --onedir ^
+  --name "%APP_NAME%" ^
+  --hidden-import="playwright_stealth" ^
+  --hidden-import="patchright" ^
+  --hidden-import="psutil" ^
+  --hidden-import="tkinter" ^
+  --hidden-import="customtkinter" ^
+  %MAIN_SCRIPT%
 
 if errorlevel 1 (
-    echo ERROR: PyInstaller failed. Check the detailed output above.
+    echo ERROR: PyInstaller build failed.
     goto EndFailure
 )
-echo PyInstaller finished successfully.
+echo Build succeeded.
 echo.
 
-REM --- Copy Setup Script for User ---
-echo Checking for user setup script '%USER_SETUP_SCRIPT%'...
-if not exist "%USER_SETUP_SCRIPT%" (
-    echo WARNING: %USER_SETUP_SCRIPT% not found in project root!
-    echo          The user needs this script to install Playwright browsers.
-    echo          Please create it using the previously provided code.
+REM --- Generate the end‐user setup_and_run.bat inside dist ---
+echo Writing setup_and_run.bat into %DIST_DIR%\%APP_NAME%...
+(
+  echo @echo off
+  echo setlocal
+  echo.
+  echo REM — Activate or warn about venv —
+  echo if exist "%%~dp0\%VENV_DIR%\Scripts\activate.bat" (^) 
+  echo     call "%%~dp0\%VENV_DIR%\Scripts\activate.bat"
+  echo ^) else (^
+  echo     echo WARNING: No venv in distribution—using system Python.
+  echo ^)
+  echo.
+  echo REM — Ensure uv is installed —
+  echo pip show uv ^> nul 2^>^&1
+  echo if errorlevel 1 (^
+  echo     echo Installing uv...
+  echo     pip install uv
+  echo     if errorlevel 1 (^
+  echo         echo ERROR: Could not install uv.
+  echo         pause
+  echo         exit /b 1
+  echo     ^)
+  echo ^)
+  echo echo.
+  echo REM — Sync dependencies —
+  echo uv sync
+  echo if errorlevel 1 (^
+  echo     echo ERROR: uv sync failed.
+  echo     pause
+  echo     exit /b 1
+  echo ^)
+  echo echo.
+  echo REM — Install Playwright browsers —
+  echo python -m playwright install
+  echo if errorlevel 1 (^
+  echo     echo ERROR: Playwright install failed.
+  echo     pause
+  echo     exit /b 1
+  echo ^)
+  echo echo.
+  echo echo Setup complete! Launch with:
+  echo echo    start "" "%%~dp0\%APP_NAME%\%APP_NAME%.exe"
+  echo pause
+  echo endlocal
+) > "%DIST_DIR%\%APP_NAME%\setup_and_run.bat"
+
+if errorlevel 1 (
+    echo WARNING: Failed to write setup script. Copy it manually from the template.
 ) else (
-    echo Copying %USER_SETUP_SCRIPT% to distribution folder...
-    copy "%USER_SETUP_SCRIPT%" "%DIST_DIR%\%APP_NAME%\" > nul
-    if errorlevel 1 (
-       echo WARNING: Failed to copy %USER_SETUP_SCRIPT%. Please copy it manually into '%DIST_DIR%\%APP_NAME%'.
-    ) else (
-       echo %USER_SETUP_SCRIPT% copied successfully.
-    )
-)
-echo.
-
-REM --- Optional: Clean up build artifacts ---
-REM Keep the build folder for potential debugging if needed
-if exist "%BUILD_DIR%" (
-    echo Cleaning up build directory...
-    rmdir /S /Q "%BUILD_DIR%"
-)
-if exist "%SPEC_FILE%" (
-    echo Cleaning up spec file...
-     del "%SPEC_FILE%"
+    echo setup_and_run.bat created successfully.
 )
 echo.
 
 echo ===================================
-echo Build Complete!
-echo ===================================
-echo The distributable application folder is: %DIST_DIR%\%APP_NAME%
-echo Ensure '%USER_SETUP_SCRIPT%' is inside that folder for the user.
+echo ALL DONE!
+echo Your distributable is at: %DIST_DIR%\%APP_NAME%
+echo Tell your users to run: setup_and_run.bat
 goto EndSuccess
-
 
 :EndFailure
 echo.
@@ -124,10 +157,8 @@ echo ********** BUILD FAILED **********
 pause
 exit /b 1
 
-:EndSuccessa
+:EndSuccess
 echo.
-echo Build finished. Press any key to exit.
+echo Press any key to finish.
 pause > nul
 exit /b 0
-
-endlocal
