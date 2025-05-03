@@ -17,27 +17,35 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install uv CLI and Python
+      - name: Setup uv CLI & Python
         uses: astral-sh/setup-uv@v5
         with:
-          # detect Python version from .python-version
-          python-version-file: ".python-version"
+          version: "0.7.2"
+          python-version: "3.10"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create venv & sync dependencies (Linux)
+      - name: Generate lockfile if missing (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          uv venv --seed
-          uv sync --locked
+          if [ ! -f uv.lock ]; then uv lock; fi
 
-      - name: Create venv & sync dependencies (Windows)
+      - name: Generate lockfile if missing (Windows)
         if: matrix.os == 'windows-latest'
         shell: powershell
         run: |
+          if (!(Test-Path -Path uv.lock)) { uv lock }
+
+      - name: Create venv & install dependencies
+        run: |
           uv venv --seed
-          uv sync --locked
+          uv sync
+        shell: ${{ matrix.os == 'windows-latest' && 'powershell' || 'bash' }}
 
       - name: Install PyInstaller
         run: pip install pyinstaller
+        shell: ${{ matrix.os == 'windows-latest' && 'powershell' || 'bash' }}
 
       - name: Build single-file Linux binary
         if: matrix.os == 'ubuntu-latest'
@@ -46,6 +54,7 @@ jobs:
             --onefile \
             --name AutomationPanel \
             app.py
+        shell: bash
 
       - name: Build Windows directory package
         if: matrix.os == 'windows-latest'
