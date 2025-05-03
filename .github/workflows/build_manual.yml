@@ -1,4 +1,4 @@
-name: Build and Package Automation Panel
+name: Build, Package & Release Automation Panel
 
 on:
   push:
@@ -24,30 +24,44 @@ jobs:
           python-version: "3.10"
           enable-cache: true
           cache-dependency-glob: "uv.lock"
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      #------------------------------------------------------
+      # Ensure a lockfile exists so that `uv sync` succeeds
+      #------------------------------------------------------
       - name: Generate lockfile if missing (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          if [ ! -f uv.lock ]; then uv lock; fi
+          if [ ! -f uv.lock ]; then
+            echo "No lockfile found – generating..."
+            uv lock
+          fi
 
       - name: Generate lockfile if missing (Windows)
         if: matrix.os == 'windows-latest'
         shell: powershell
         run: |
-          if (!(Test-Path -Path uv.lock)) { uv lock }
+          if (!(Test-Path -Path uv.lock)) {
+            Write-Host "No lockfile found – generating..."
+            uv lock
+          }
 
+      #------------------------------------------------------
+      # Create an isolated environment & install dependencies
+      #------------------------------------------------------
       - name: Create venv & install dependencies
         run: |
           uv venv --seed
           uv sync
         shell: ${{ matrix.os == 'windows-latest' && 'powershell' || 'bash' }}
 
+      #------------------------------------------------------
+      # Build binaries with PyInstaller
+      #------------------------------------------------------
       - name: Install PyInstaller
         run: pip install pyinstaller
         shell: ${{ matrix.os == 'windows-latest' && 'powershell' || 'bash' }}
 
-      - name: Build single-file Linux binary
+      - name: Build single‑file Linux binary
         if: matrix.os == 'ubuntu-latest'
         run: |
           pyinstaller --noconfirm \
@@ -69,6 +83,9 @@ jobs:
             --hidden-import=customtkinter `
             app.py
 
+      #------------------------------------------------------
+      # Upload raw build artifacts for later packaging
+      #------------------------------------------------------
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -76,3 +93,57 @@ jobs:
           path: |
             dist/AutomationPanel*
             dist/AutomationPanel-windows*
+
+  #==========================================================
+  # Create a GitHub Release and attach zipped artifacts
+  #==========================================================
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: binaries-*
+          path: release-assets
+          merge-multiple: true
+
+      #----------------------------------------------
+      # Package the binaries into OS‑specific ZIPs
+      #----------------------------------------------
+      - name: Zip assets
+        run: |
+          cd release-assets
+          # Package Windows directory, if present
+          if [ -d AutomationPanel-windows ]; then
+            echo "Zipping Windows package..."
+            zip -r AutomationPanel-windows.zip AutomationPanel-windows
+            rm -rf AutomationPanel-windows
+          fi
+          # Package Linux binary, if present
+          if [ -f AutomationPanel ]; then
+            echo "Zipping Linux binary..."
+            zip AutomationPanel-linux.zip AutomationPanel
+            rm AutomationPanel
+          fi
+
+      #----------------------------------------------
+      # Generate a timestamped prerelease tag
+      #----------------------------------------------
+      - name: Set release metadata
+        id: rel
+        run: echo "name=build-$(date +'%Y%m%d-%H%M%S')" >> "$GITHUB_OUTPUT"
+
+      #----------------------------------------------
+      # Publish the GitHub Release with zipped assets
+      #----------------------------------------------
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.rel.outputs.name }}
+          name: ${{ steps.rel.outputs.name }}
+          prerelease: true
+          files: release-assets/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
