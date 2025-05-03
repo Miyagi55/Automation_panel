@@ -1,68 +1,114 @@
-# .github/workflows/build_windows.yml
-name: Build & Release Windows
+name: Build and Release
 
 on:
   push:
     branches: [master]
-
-permissions:
-  contents: write
+  workflow_dispatch:
 
 jobs:
   build:
-    name: Build on Windows
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install uv & Python 3.10
-        uses: astral-sh/setup-uv@v5
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          version: "0.7.2"
           python-version: "3.10"
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
-          prune-cache: true
 
-      - name: Build with build.bat
-        # habilita comandos extendidos y expansión retardada
-        shell: cmd /E:ON /V:ON {0}
+      - name: Install global dependencies
+        if: matrix.os == 'windows-latest'
         run: |
-          call build.bat
+          python -m pip install --upgrade pip
+          pip install uv
+        shell: bash
 
-      - name: Upload Windows distributable
+      - name: Create and seed virtual environment (Windows)
+        if: matrix.os == 'windows-latest'
+        run: uv venv --seed
+        shell: bash
+
+      - name: Activate venv (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          .\.venv\Scripts\activate
+        shell: powershell
+
+      - name: Sync dependencies (Windows)
+        if: matrix.os == 'windows-latest'
+        run: uv sync
+        shell: bash
+
+      - name: Install build tools
+        if: matrix.os == 'windows-latest'
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+        shell: bash
+
+      - name: Build with build.bat (Windows)
+        if: matrix.os == 'windows-latest'
+        run: .\build.bat
+        shell: cmd
+
+      - name: Install project & PyInstaller (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pyinstaller
+        shell: bash
+
+      - name: Build binary (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          pyinstaller --noconfirm --onefile app.py --name AutomationPanel
+        shell: bash
+
+      - name: Collect artifacts
+        run: |
+          mkdir upload
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            mv dist/AutomationPanel-windows.exe upload/AutomationPanel-windows.exe
+          else
+            mv dist/AutomationPanel upload/AutomationPanel-linux
+          fi
+        shell: bash
+
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: windows-dist
-          path: dist/AutomationPanel-windows/**
+          name: binaries-${{ matrix.os }}
+          path: upload/*
 
   release:
-    name: Draft GitHub prerelease
     needs: build
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download Windows distributable
+      - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: windows-dist
-          path: release-assets/AutomationPanel-windows
+          pattern: binaries-*
+          path: release-assets
+          merge-multiple: true
 
-      - name: Zip source code
-        run: |
-          zip -r release-assets/source.zip . \
-            -x ".git/*" "dist/*" "build/*" ".venv/*" "logs/*"
+      - name: Set release name
+        id: rel
+        run: echo "name=build-$(date +'%Y%m%d-%H%M%S')" >> "$GITHUB_OUTPUT"
 
-      - name: Publish GitHub prerelease
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: build-${{ github.run_number }}
-          name: build-${{ github.run_number }}
+          tag_name: ${{ steps.rel.outputs.name }}
+          name: ${{ steps.rel.outputs.name }}
           prerelease: true
-          files: |
-            release-assets/AutomationPanel-windows/**
-            release-assets/source.zip
+          files: release-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
