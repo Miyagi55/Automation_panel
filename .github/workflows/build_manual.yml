@@ -1,4 +1,4 @@
-name: Windows PyInstaller Build with uv
+name: Windows Build & Packaging
 
 on:
   push:
@@ -10,39 +10,44 @@ permissions:
 
 jobs:
   build-windows:
+    name: Build & Package on Windows
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      # 1) Checkout
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
+      # 2) Install uv (pin to 0.7.2) and enable cache on uv.lock
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
-          version: "0.7.2"
+          version: '0.7.2'
           enable-cache: true
-          cache-dependency-glob: "uv.lock"
+          cache-dependency-glob: 'uv.lock'
 
-      - name: Install Python via uv
-        run: uv python install
+      # 3) Ensure virtual environment seeded with pip
+      - name: Step 1: Create venv seeded with pip
+        run: uv venv --seed
 
-      # ← NEW STEP: generate uv.lock
-      - name: Generate uv.lock
-        run: uv lock
+      # 4) Sync project dependencies into the venv
+      - name: Step 3: Sync project deps
+        run: uv sync
 
-      - name: Sync dependencies (locked)
-        run: uv sync --locked
+      # 5) Install build tools (pip & PyInstaller) into the venv
+      - name: Step 4: Install pip & PyInstaller
+        run: uv pip install --upgrade pip pyinstaller
 
-      - name: Install PyInstaller
-        run: uv pip install --upgrade pyinstaller
-
-      - name: Clean dist & build
+      # 6) Clean previous dist/build/spec artifacts
+      - name: Step 5: Clean old dist/build/spec
         shell: cmd
         run: |
           if exist dist\AutomationPanel-windows rmdir /S /Q dist\AutomationPanel-windows
           if exist build rmdir /S /Q build
           if exist AutomationPanel-windows.spec del AutomationPanel-windows.spec
 
-      - name: Run PyInstaller
+      # 7) Run PyInstaller from within the venv
+      - name: Step 6: Run PyInstaller (--onedir)
         shell: cmd
         run: uv run python -m PyInstaller ^
           --noconsole ^
@@ -55,7 +60,9 @@ jobs:
           --hidden-import=customtkinter ^
           app.py
 
-      - uses: actions/upload-artifact@v4
+      # 8) Upload the resulting dist folder as artifact
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
         with:
           name: AutomationPanel-windows
           path: dist/AutomationPanel-windows
