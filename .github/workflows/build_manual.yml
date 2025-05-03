@@ -1,25 +1,20 @@
-name: PyInstaller Auto-Release
+name: Windows PyInstaller Build
 
 on:
   push:
-    branches: [master]
+    branches:
+      - master
 
 permissions:
   contents: write
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-
-    env:
-      APP_NAME_WINDOWS: AutomationPanel-windows
-      APP_NAME_LINUX: AutomationPanel-linux
+  build-windows:
+    name: Build on Windows
+    runs-on: windows-latest
 
     steps:
-      - name: Checkout repository
+      - name: Check out code
         uses: actions/checkout@v4
 
       - name: Setup Python 3.10
@@ -28,56 +23,59 @@ jobs:
           python-version: 3.10
 
       - name: Install uv globally
-        run: python -m pip install --upgrade pip uv
+        run: |
+          python -m pip install --upgrade pip uv
 
-      - name: Create & seed venv
-        run: uv venv --seed
+      - name: Ensure .venv exists & seed pip
+        run: |
+          uv venv --seed
+        # if this fails, exit the job
+        shell: cmd
+
+      - name: Prep venv executables in PATH
+        run: |
+          echo Adding venv to PATH...
+          set "VENV_SCRIPTS=%CD%\.venv\Scripts"
+          set "PATH=%VENV_SCRIPTS%;%PATH%"
+          where python
+          where pip
+        shell: cmd
 
       - name: Sync project dependencies
-        run: uv sync
-
-      - name: Activate venv & install build tools
-        shell: bash
         run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            VENV_BIN="$PWD/.venv/Scripts"
-          else
-            VENV_BIN="$PWD/.venv/bin"
-          fi
-          export PATH="$VENV_BIN:$PATH"
+          uv sync
+        shell: cmd
+
+      - name: Install build tools into venv
+        run: |
           pip install --upgrade pip pyinstaller
+        shell: cmd
 
-      - name: Build with PyInstaller
-        shell: bash
+      - name: Clean old artifacts
         run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            NAME="$APP_NAME_WINDOWS"
-          else
-            NAME="$APP_NAME_LINUX"
-          fi
-          python -m PyInstaller \
-            --noconsole \
-            --onedir \
-            --name "$NAME" \
-            --hidden-import=playwright_stealth \
-            --hidden-import=patchright \
-            --hidden-import=psutil \
-            --hidden-import=tkinter \
-            --hidden-import=customtkinter \
+          if exist dist\%APP_NAME% rmdir /S /Q dist\%APP_NAME%
+          if exist build rmdir /S /Q build
+          if exist %APP_NAME%.spec del %APP_NAME%.spec
+        env:
+          APP_NAME: AutomationPanel-windows
+        shell: cmd
+
+      - name: Run PyInstaller
+        run: |
+          pyinstaller ^
+            --noconsole ^
+            --onedir ^
+            --name AutomationPanel-windows ^
+            --hidden-import=playwright_stealth ^
+            --hidden-import=patchright ^
+            --hidden-import=psutil ^
+            --hidden-import=tkinter ^
+            --hidden-import=customtkinter ^
             app.py
+        shell: cmd
 
-      - name: Rename & collect artifact
-        shell: bash
-        run: |
-          mkdir upload
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            mv "dist/$APP_NAME_WINDOWS" upload/
-          else
-            mv "dist/$APP_NAME_LINUX" upload/
-          fi
-
-      - name: Upload binaries
+      - name: Upload distributable
         uses: actions/upload-artifact@v4
         with:
-          name: binaries-${{ runner.os }}
-          path: upload/*
+          name: AutomationPanel-windows
+          path: dist/AutomationPanel-windows
