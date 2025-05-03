@@ -1,4 +1,4 @@
-name: Windows PyInstaller Build
+name: Windows PyInstaller Build with uv
 
 on:
   push:
@@ -10,59 +10,46 @@ permissions:
 
 jobs:
   build-windows:
-    name: Build on Windows
+    name: Build & Package on Windows
     runs-on: windows-latest
 
     steps:
-      - name: Check out code
+      # 1) Checkout the repo
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Python 3.10
-        uses: actions/setup-python@v4
+      # 2) Install uv (pin to 0.7.2) and enable its cache
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: 3.10
+          version: "0.7.2"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
-      - name: Install uv globally
-        run: |
-          python -m pip install --upgrade pip uv
+      # 3) Install Python version from .python-version into the uv-managed venv
+      - name: Install Python via uv
+        run: uv python install
 
-      - name: Ensure .venv exists & seed pip
-        run: |
-          uv venv --seed
-        # if this fails, exit the job
-        shell: cmd
+      # 4) Ensure the project deps are synced into the venv
+      - name: Sync dependencies
+        run: uv sync --locked
 
-      - name: Prep venv executables in PATH
-        run: |
-          echo Adding venv to PATH...
-          set "VENV_SCRIPTS=%CD%\.venv\Scripts"
-          set "PATH=%VENV_SCRIPTS%;%PATH%"
-          where python
-          where pip
-        shell: cmd
+      # 5) Install build tools (PyInstaller) into the same venv
+      - name: Install PyInstaller
+        run: uv pip install --upgrade pyinstaller
 
-      - name: Sync project dependencies
+      # 6) Clean previous build artifacts
+      - name: Clean dist & build
         run: |
-          uv sync
-        shell: cmd
-
-      - name: Install build tools into venv
-        run: |
-          pip install --upgrade pip pyinstaller
-        shell: cmd
-
-      - name: Clean old artifacts
-        run: |
-          if exist dist\%APP_NAME% rmdir /S /Q dist\%APP_NAME%
+          if exist dist\AutomationPanel-windows rmdir /S /Q dist\AutomationPanel-windows
           if exist build rmdir /S /Q build
-          if exist %APP_NAME%.spec del %APP_NAME%.spec
-        env:
-          APP_NAME: AutomationPanel-windows
+          if exist AutomationPanel-windows.spec del AutomationPanel-windows.spec
         shell: cmd
 
+      # 7) Run PyInstaller from within the uv venv
       - name: Run PyInstaller
         run: |
-          pyinstaller ^
+          uv run python -m PyInstaller ^
             --noconsole ^
             --onedir ^
             --name AutomationPanel-windows ^
@@ -74,7 +61,8 @@ jobs:
             app.py
         shell: cmd
 
-      - name: Upload distributable
+      # 8) Upload the distributable folder as an artifact
+      - name: Upload dist artifact
         uses: actions/upload-artifact@v4
         with:
           name: AutomationPanel-windows
