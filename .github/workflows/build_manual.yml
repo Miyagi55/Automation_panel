@@ -1,4 +1,5 @@
-name: PyInstaller Auto-Release
+# .github/workflows/windows-build-and-release.yml
+name: Build & Release (Windows)
 
 on:
   push:
@@ -6,71 +7,117 @@ on:
       - master
 
 permissions:
-  contents: write
+  contents: write # to create releases
 
 jobs:
   build:
+    name: Build on Windows
     runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10"]
-
+    outputs:
+      dist-path: ${{ steps.upload-artifact.outputs.artifact-path }}
     steps:
-      # 1) Checkout
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      # 2) Setup Python
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+      - name: Install uv & Python 3.10
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          version: "0.7.2"
+          python-version: "3.10"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+          prune-cache: true
 
-      # 3) Install project & PyInstaller
-      - name: Install project & PyInstaller
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .
-          pip install pyinstaller
+      - name: Create virtualenv seeded with pip
+        run: uv venv --seed
 
-      # 4) Build binary
-      - name: Build binary
-        run: |
-          pyinstaller --noconfirm --onefile app.py --name AutomationPanel-windows
-
-      # 5) Prepare upload dir & move exe
-      - name: Rename binary for Windows
+      - name: Activate venv & show interpreters
         shell: cmd
         run: |
-          mkdir upload
-          move dist\AutomationPanel-windows.exe upload\AutomationPanel-windows.exe
+          set "VENV_SCRIPTS=%CD%\.venv\Scripts"
+          set "PATH=%VENV_SCRIPTS%;%PATH%"
+          where python
+          where pip
 
-      # 6) Upload artifact
-      - name: Upload Windows binary
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Install PyInstaller in venv
+        shell: cmd
+        run: |
+          pip install --upgrade pip pyinstaller
+
+      - name: Run PyInstaller
+        shell: cmd
+        run: |
+          pyinstaller ^
+            --noconsole ^
+            --onedir ^
+            --name AutomationPanel-windows ^
+            --hidden-import=playwright_stealth ^
+            --hidden-import=patchright ^
+            --hidden-import=psutil ^
+            --hidden-import=tkinter ^
+            --hidden-import=customtkinter ^
+            app.py
+
+      - name: Generate setup_and_run.bat
+        shell: cmd
+        run: |
+          mkdir dist\AutomationPanel-windows
+          (
+            echo @echo off
+            echo setlocal
+            echo rem Activate venv if present
+            echo if exist "%%%%~dp0\.venv\Scripts\activate.bat" ^( 
+            echo     call "%%%%~dp0\.venv\Scripts\activate.bat"
+            echo ^) else ^(
+            echo     echo WARNING: No venv—using system Python.
+            echo ^)
+            echo rem Sync dependencies
+            echo pip install uv ^^^>nul 2^^^>^^&1 ^^^|^^^| pip install uv
+            echo uv sync
+            echo rem Ensure Playwright browsers
+            echo python -m playwright install --with-deps
+            echo start "" "%%%%~dp0AutomationPanel-windows\AutomationPanel-windows.exe"
+            echo endlocal
+          ) > dist\AutomationPanel-windows\setup_and_run.bat
+
+      - name: Upload Windows dist folder
         uses: actions/upload-artifact@v4
+        id: upload-artifact
         with:
-          name: AutomationPanel-windows
-          path: upload\AutomationPanel-windows.exe
+          name: windows-dist
+          path: dist/AutomationPanel-windows
 
   release:
+    name: Publish Release
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Windows dist artifact
+        uses: actions/download-artifact@v4
         with:
-          name: AutomationPanel-windows
-          path: release-assets
+          name: windows-dist
+          path: release-assets/windows
 
-      - name: Set release name
-        id: rel
-        run: echo "name=build-$(date +'%Y%m%d-%H%M%S')" >> "$GITHUB_OUTPUT"
+      - name: Zip source code
+        run: |
+          zip -r release-assets/source.zip . -x .git/* release-assets/* dist/* build/* .venv/* logs/*
 
-      - name: Publish GitHub Release
+      - name: Create GitHub Release
+        id: gh_release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.rel.outputs.name }}
-          name: ${{ steps.rel.outputs.name }}
+          tag_name: build-${{ github.run_number }}
+          name: build-${{ github.run_number }}
           prerelease: true
-          files: release-assets/AutomationPanel-windows.exe
+          files: |
+            release-assets/windows/AutomationPanel-windows.exe
+            release-assets/windows/setup_and_run.bat
+            release-assets/source.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
