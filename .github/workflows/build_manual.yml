@@ -1,25 +1,23 @@
-# .github/workflows/windows-build-and-release.yml
-name: Build & Release (Windows)
+name: Build & Release (Windows only)
 
 on:
   push:
-    branches:
-      - master
+    branches: [master]
 
 permissions:
-  contents: write # to create releases
+  contents: write # para crear la release
 
 jobs:
   build:
-    name: Build on Windows
     runs-on: windows-latest
-    outputs:
-      dist-path: ${{ steps.upload-artifact.outputs.artifact-path }}
+    name: Build on Windows
+
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install uv & Python 3.10
+      # Instalamos uv + Python 3.10 (misma versión que en tu bat)
+      - name: Setup uv + Python 3.10
         uses: astral-sh/setup-uv@v5
         with:
           version: "0.7.2"
@@ -28,96 +26,45 @@ jobs:
           cache-dependency-glob: "uv.lock"
           prune-cache: true
 
-      - name: Create virtualenv seeded with pip
-        run: uv venv --seed
-
-      - name: Activate venv & show interpreters
+      # Ejecutamos EXACTAMENTE tu script
+      - name: Run local build.bat
         shell: cmd
         run: |
-          set "VENV_SCRIPTS=%CD%\.venv\Scripts"
-          set "PATH=%VENV_SCRIPTS%;%PATH%"
-          where python
-          where pip
+          call build.bat
 
-      - name: Sync dependencies
-        run: uv sync
-
-      - name: Install PyInstaller in venv
-        shell: cmd
-        run: |
-          pip install --upgrade pip pyinstaller
-
-      - name: Run PyInstaller
-        shell: cmd
-        run: |
-          pyinstaller ^
-            --noconsole ^
-            --onedir ^
-            --name AutomationPanel-windows ^
-            --hidden-import=playwright_stealth ^
-            --hidden-import=patchright ^
-            --hidden-import=psutil ^
-            --hidden-import=tkinter ^
-            --hidden-import=customtkinter ^
-            app.py
-
-      - name: Generate setup_and_run.bat
-        shell: cmd
-        run: |
-          mkdir dist\AutomationPanel-windows
-          (
-            echo @echo off
-            echo setlocal
-            echo rem Activate venv if present
-            echo if exist "%%%%~dp0\.venv\Scripts\activate.bat" ^( 
-            echo     call "%%%%~dp0\.venv\Scripts\activate.bat"
-            echo ^) else ^(
-            echo     echo WARNING: No venv—using system Python.
-            echo ^)
-            echo rem Sync dependencies
-            echo pip install uv ^^^>nul 2^^^>^^&1 ^^^|^^^| pip install uv
-            echo uv sync
-            echo rem Ensure Playwright browsers
-            echo python -m playwright install --with-deps
-            echo start "" "%%%%~dp0AutomationPanel-windows\AutomationPanel-windows.exe"
-            echo endlocal
-          ) > dist\AutomationPanel-windows\setup_and_run.bat
-
-      - name: Upload Windows dist folder
+      # Subimos todo el directorio dist (exe + setup_and_run.bat + resto)
+      - name: Upload dist
         uses: actions/upload-artifact@v4
-        id: upload-artifact
         with:
           name: windows-dist
-          path: dist/AutomationPanel-windows
+          path: dist/AutomationPanel-windows/**
 
   release:
-    name: Publish Release
     needs: build
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    name: Draft GitHub prerelease
 
-      - name: Download Windows dist artifact
+    steps:
+      - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: windows-dist
-          path: release-assets/windows
+          path: release-assets/AutomationPanel-windows
 
-      - name: Zip source code
+      # Empaquetamos el código fuente (excepto carpetas pesadas)
+      - name: Zip source
         run: |
-          zip -r release-assets/source.zip . -x .git/* release-assets/* dist/* build/* .venv/* logs/*
+          zip -r release-assets/source.zip . \
+              -x ".git/*" "dist/*" "build/*" ".venv/*" "logs/*"
 
-      - name: Create GitHub Release
-        id: gh_release
+      - name: Publish prerelease
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: build-${{ github.run_number }}
           prerelease: true
           files: |
-            release-assets/windows/AutomationPanel-windows.exe
-            release-assets/windows/setup_and_run.bat
+            release-assets/AutomationPanel-windows/**
             release-assets/source.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
