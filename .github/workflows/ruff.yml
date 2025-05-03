@@ -1,5 +1,5 @@
 # .github/workflows/ruff.yml
-name: Lint with Ruff
+name: Lint & Auto‑fix with Ruff
 
 on:
   push:
@@ -20,12 +20,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run Ruff
+      - name: Cache Ruff
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/ruff
+          key: ${{ runner.os }}-ruff-${{ hashFiles('pyproject.toml','.ruff.toml') }}
+
+      - name: Auto‑fix problems
         uses: astral-sh/ruff-action@v3.3.0
         with:
-          # por defecto hace `ruff check`, aquí explícitamente:
           args: fix .
-          # directorio a lintear (puede ser '.' o 'app/' si prefieres)
           src: .
-          # lee la versión de ruff de pyproject.toml
+          version-file: pyproject.toml
+
+      - name: Check no violations remain
+        uses: astral-sh/ruff-action@v3.3.0
+        with:
+          args: check .
+          src: .
           version-file: pyproject.toml
