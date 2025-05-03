@@ -1,26 +1,53 @@
+# .github/workflows/lint.yml
 name: Lint
 
-on: [push, pull_request]
+on:
+  push:
+    paths:
+      - '**/*.py'
+      - 'pyproject.toml'
+      - 'requirements.txt'
+      - '.pylintrc'
 
 jobs:
   pylint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Set up Python 3.10 with pip cache
+      - name: Cache pip
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml','**/requirements.txt') }}
+
+      - name: Set up Python 3.10
         uses: actions/setup-python@v4
         with:
           python-version: 3.10
-          cache: pip              # cachea ~/.cache/pip automáticamente :contentReference[oaicite:0]{index=0}
 
-      - name: Install project & pylint
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -e .
           pip install pylint
 
-      - name: Lint (parallel, no-fail)
+      - name: Cache Pylint cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.pylint.d
+          key: ${{ runner.os }}-pylint-${{ hashFiles('**/.pylintrc') }}
+
+      - name: Lint changed files (parallel, no-fail)
         run: |
-          # usar todos los núcleos disponibles (-j 0) para speed up :contentReference[oaicite:1]{index=1}
-          pylint -j 0 --exit-zero $(git ls-files '*.py')
+          # detecta qué .py cambió en este push
+          changed=$(git diff --name-only ${{ github.sha }} ${{ github.sha }}^ -- '*.py')
+          if [ -n "$changed" ]; then
+            echo "Linting only changed files:"
+            echo "$changed"
+            pylint --exit-zero --jobs=$(nproc) $changed
+          else
+            echo "No changed .py files detected, linting all:"
+            pylint --exit-zero --jobs=$(nproc) $(git ls-files '*.py')
+          fi
