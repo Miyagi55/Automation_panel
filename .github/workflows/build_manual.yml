@@ -10,15 +10,11 @@ permissions:
 
 jobs:
   build-windows:
-    name: Build & Package on Windows
     runs-on: windows-latest
 
     steps:
-      # 1) Checkout the repo
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # 2) Install uv (pin to 0.7.2) and enable its cache
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
@@ -26,44 +22,40 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
-      # 3) Install Python version from .python-version into the uv-managed venv
       - name: Install Python via uv
         run: uv python install
 
-      # 4) Ensure the project deps are synced into the venv
-      - name: Sync dependencies
+      # ← NEW STEP: generate uv.lock
+      - name: Generate uv.lock
+        run: uv lock
+
+      - name: Sync dependencies (locked)
         run: uv sync --locked
 
-      # 5) Install build tools (PyInstaller) into the same venv
       - name: Install PyInstaller
         run: uv pip install --upgrade pyinstaller
 
-      # 6) Clean previous build artifacts
       - name: Clean dist & build
+        shell: cmd
         run: |
           if exist dist\AutomationPanel-windows rmdir /S /Q dist\AutomationPanel-windows
           if exist build rmdir /S /Q build
           if exist AutomationPanel-windows.spec del AutomationPanel-windows.spec
-        shell: cmd
 
-      # 7) Run PyInstaller from within the uv venv
       - name: Run PyInstaller
-        run: |
-          uv run python -m PyInstaller ^
-            --noconsole ^
-            --onedir ^
-            --name AutomationPanel-windows ^
-            --hidden-import=playwright_stealth ^
-            --hidden-import=patchright ^
-            --hidden-import=psutil ^
-            --hidden-import=tkinter ^
-            --hidden-import=customtkinter ^
-            app.py
         shell: cmd
+        run: uv run python -m PyInstaller ^
+          --noconsole ^
+          --onedir ^
+          --name AutomationPanel-windows ^
+          --hidden-import=playwright_stealth ^
+          --hidden-import=patchright ^
+          --hidden-import=psutil ^
+          --hidden-import=tkinter ^
+          --hidden-import=customtkinter ^
+          app.py
 
-      # 8) Upload the distributable folder as an artifact
-      - name: Upload dist artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: AutomationPanel-windows
           path: dist/AutomationPanel-windows
