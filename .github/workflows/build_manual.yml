@@ -11,63 +11,73 @@ jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
 
+    env:
+      APP_NAME_WINDOWS: AutomationPanel-windows
+      APP_NAME_LINUX: AutomationPanel-linux
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v4
+      - name: Setup Python 3.10
+        uses: actions/setup-python@v4
         with:
-          python-version: "3.12"
+          python-version: 3.10
 
-      - name: Install project & PyInstaller
+      - name: Install uv globally
+        run: python -m pip install --upgrade pip uv
+
+      - name: Create & seed venv
+        run: uv venv --seed
+
+      - name: Sync project dependencies
+        run: uv sync
+
+      - name: Activate venv & install build tools
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
-          pip install -e .
-          pip install pyinstaller
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            VENV_BIN="$PWD/.venv/Scripts"
+          else
+            VENV_BIN="$PWD/.venv/bin"
+          fi
+          export PATH="$VENV_BIN:$PATH"
+          pip install --upgrade pip pyinstaller
 
-      - name: Build binary
+      - name: Build with PyInstaller
+        shell: bash
         run: |
-          pyinstaller --noconfirm --onefile app.py --name AutomationPanel
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            NAME="$APP_NAME_WINDOWS"
+          else
+            NAME="$APP_NAME_LINUX"
+          fi
+          python -m PyInstaller \
+            --noconsole \
+            --onedir \
+            --name "$NAME" \
+            --hidden-import=playwright_stealth \
+            --hidden-import=patchright \
+            --hidden-import=psutil \
+            --hidden-import=tkinter \
+            --hidden-import=customtkinter \
+            app.py
 
-      - name: Rename binary
+      - name: Rename & collect artifact
         shell: bash
         run: |
           mkdir upload
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            mv dist/AutomationPanel.exe upload/AutomationPanel-windows.exe
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            mv "dist/$APP_NAME_WINDOWS" upload/
           else
-            mv dist/AutomationPanel upload/AutomationPanel-linux
+            mv "dist/$APP_NAME_LINUX" upload/
           fi
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
         with:
           name: binaries-${{ runner.os }}
           path: upload/*
-          if-no-files-found: error
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: binaries-*
-          path: release-assets
-          merge-multiple: true
-
-      - name: Set release name
-        id: rel
-        run: echo "name=build-$(date +'%Y%m%d-%H%M%S')" >> "$GITHUB_OUTPUT"
-
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.rel.outputs.name }}
-          name: ${{ steps.rel.outputs.name }}
-          prerelease: true
-          files: release-assets/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
