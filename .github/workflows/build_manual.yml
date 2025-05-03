@@ -1,4 +1,5 @@
-name: Build & Release (Windows only)
+# .github/workflows/build_windows.yml
+name: Build & Release Windows
 
 on:
   push:
@@ -9,13 +10,14 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
     name: Build on Windows
+    runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Setup uv + Python 3.10
+      - name: Install uv & Python 3.10
         uses: astral-sh/setup-uv@v5
         with:
           version: "0.7.2"
@@ -24,34 +26,36 @@ jobs:
           cache-dependency-glob: "uv.lock"
           prune-cache: true
 
-      - name: Run local build.bat with delayed expansion
+      - name: Build with build.bat
+        # habilita comandos extendidos y expansión retardada
         shell: cmd /E:ON /V:ON {0}
         run: |
           call build.bat
 
-      - name: Upload dist
+      - name: Upload Windows distributable
         uses: actions/upload-artifact@v4
         with:
           name: windows-dist
           path: dist/AutomationPanel-windows/**
 
   release:
+    name: Draft GitHub prerelease
     needs: build
     runs-on: ubuntu-latest
-    name: Draft GitHub prerelease
 
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download Windows distributable
+        uses: actions/download-artifact@v4
         with:
           name: windows-dist
           path: release-assets/AutomationPanel-windows
 
-      - name: Zip source
+      - name: Zip source code
         run: |
           zip -r release-assets/source.zip . \
             -x ".git/*" "dist/*" "build/*" ".venv/*" "logs/*"
 
-      - name: Publish prerelease
+      - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
