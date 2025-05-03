@@ -6,6 +6,15 @@ on:
   push:
     branches:
       - master
+
+    paths:
+      - 'app/**'
+      - 'pyproject.toml'
+      - 'build.bat'
+      - 'start.bat'
+      - 'AutomationPanel-windows.spec'
+      - 'README.md'
+      
   workflow_dispatch:
 
 jobs:
