@@ -36,7 +36,7 @@ class Logger:
 
         # Set up Python's logging
         self.logger = logging.getLogger("automation_panel")
-        self.logger.setLevel(logging.INFO)
+        self.logger.setLevel(logging.DEBUG)
 
         # Clear any existing handlers (important for module reloads)
         if self.logger.handlers:
