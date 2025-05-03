@@ -1,149 +1,60 @@
-name: Build, Package & Release Automation Panel
+name: PyInstaller Auto-Release
 
 on:
   push:
-    branches: [master]
-  workflow_dispatch:
+    branches:
+      - master
+
+permissions:
+  contents: write
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+    runs-on: windows-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup uv CLI & Python
-        uses: astral-sh/setup-uv@v5
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v4
         with:
-          version: "0.7.2"
           python-version: "3.10"
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
 
-      #------------------------------------------------------
-      # Ensure a lockfile exists so that `uv sync` succeeds
-      #------------------------------------------------------
-      - name: Generate lockfile if missing (Linux)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Install uv CLI
         run: |
-          if [ ! -f uv.lock ]; then
-            echo "No lockfile found – generating..."
-            uv lock
-          fi
+          python -m pip install --upgrade pip uv
 
-      - name: Generate lockfile if missing (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: powershell
-        run: |
-          if (!(Test-Path -Path uv.lock)) {
-            Write-Host "No lockfile found – generating..."
-            uv lock
-          }
+      - name: Run your build.bat
+        run: .\build.bat
 
-      #------------------------------------------------------
-      # Create an isolated environment & install dependencies
-      #------------------------------------------------------
-      - name: Create venv & install dependencies
-        run: |
-          uv venv --seed
-          uv sync
-        shell: ${{ matrix.os == 'windows-latest' && 'powershell' || 'bash' }}
-
-      #------------------------------------------------------
-      # Build binaries with PyInstaller
-      #------------------------------------------------------
-      - name: Install PyInstaller
-        run: pip install pyinstaller
-        shell: ${{ matrix.os == 'windows-latest' && 'powershell' || 'bash' }}
-
-      - name: Build single‑file Linux binary
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          pyinstaller --noconfirm \
-            --onefile \
-            --name AutomationPanel \
-            app.py
-        shell: bash
-
-      - name: Build Windows directory package
-        if: matrix.os == 'windows-latest'
-        shell: powershell
-        run: |
-          pyinstaller --noconfirm --onedir `
-            --name AutomationPanel-windows `
-            --hidden-import=playwright_stealth `
-            --hidden-import=patchright `
-            --hidden-import=psutil `
-            --hidden-import=tkinter `
-            --hidden-import=customtkinter `
-            app.py
-
-      #------------------------------------------------------
-      # Upload raw build artifacts for later packaging
-      #------------------------------------------------------
-      - name: Upload build artifacts
+      - name: Upload distributable
         uses: actions/upload-artifact@v4
         with:
-          name: binaries-${{ matrix.os }}
-          path: |
-            dist/AutomationPanel*
-            dist/AutomationPanel-windows*
+          name: AutomationPanel-windows
+          path: dist/AutomationPanel-windows/**
 
-  #==========================================================
-  # Create a GitHub Release and attach zipped artifacts
-  #==========================================================
   release:
     needs: build
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download build artifacts
+      - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          pattern: binaries-*
+          name: AutomationPanel-windows
           path: release-assets
-          merge-multiple: true
 
-      #----------------------------------------------
-      # Package the binaries into OS‑specific ZIPs
-      #----------------------------------------------
-      - name: Zip assets
-        run: |
-          cd release-assets
-          # Package Windows directory, if present
-          if [ -d AutomationPanel-windows ]; then
-            echo "Zipping Windows package..."
-            zip -r AutomationPanel-windows.zip AutomationPanel-windows
-            rm -rf AutomationPanel-windows
-          fi
-          # Package Linux binary, if present
-          if [ -f AutomationPanel ]; then
-            echo "Zipping Linux binary..."
-            zip AutomationPanel-linux.zip AutomationPanel
-            rm AutomationPanel
-          fi
-
-      #----------------------------------------------
-      # Generate a timestamped prerelease tag
-      #----------------------------------------------
-      - name: Set release metadata
+      - name: Set release name
         id: rel
         run: echo "name=build-$(date +'%Y%m%d-%H%M%S')" >> "$GITHUB_OUTPUT"
 
-      #----------------------------------------------
-      # Publish the GitHub Release with zipped assets
-      #----------------------------------------------
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.rel.outputs.name }}
           name: ${{ steps.rel.outputs.name }}
           prerelease: true
-          files: release-assets/*.zip
+          files: release-assets/**/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
