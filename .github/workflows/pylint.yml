@@ -1,6 +1,6 @@
 name: Lint
 
-on: [push]
+on: [push, pull_request]
 
 jobs:
   pylint:
@@ -8,10 +8,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
+      - name: Set up Python 3.10 with pip cache
         uses: actions/setup-python@v4
         with:
-          python-version: 3.12
+          python-version: 3.10
+          cache: pip              # cachea ~/.cache/pip automáticamente :contentReference[oaicite:0]{index=0}
 
       - name: Install project & pylint
         run: |
@@ -19,5 +20,7 @@ jobs:
           pip install -e .
           pip install pylint
 
-      - name: Lint (no-fail)
-        run: pylint --exit-zero $(git ls-files '*.py')
+      - name: Lint (parallel, no-fail)
+        run: |
+          # usar todos los núcleos disponibles (-j 0) para speed up :contentReference[oaicite:1]{index=1}
+          pylint -j 0 --exit-zero $(git ls-files '*.py')
