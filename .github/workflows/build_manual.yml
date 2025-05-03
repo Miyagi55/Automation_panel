@@ -5,7 +5,7 @@ on:
     branches: [master]
 
 permissions:
-  contents: write # para crear la release
+  contents: write
 
 jobs:
   build:
@@ -13,10 +13,8 @@ jobs:
     name: Build on Windows
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # Instalamos uv + Python 3.10 (misma versión que en tu bat)
       - name: Setup uv + Python 3.10
         uses: astral-sh/setup-uv@v5
         with:
@@ -26,13 +24,11 @@ jobs:
           cache-dependency-glob: "uv.lock"
           prune-cache: true
 
-      # Ejecutamos EXACTAMENTE tu script
-      - name: Run local build.bat
-        shell: cmd
+      - name: Run local build.bat with delayed expansion
+        shell: cmd /E:ON /V:ON {0}
         run: |
           call build.bat
 
-      # Subimos todo el directorio dist (exe + setup_and_run.bat + resto)
       - name: Upload dist
         uses: actions/upload-artifact@v4
         with:
@@ -45,17 +41,15 @@ jobs:
     name: Draft GitHub prerelease
 
     steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: windows-dist
           path: release-assets/AutomationPanel-windows
 
-      # Empaquetamos el código fuente (excepto carpetas pesadas)
       - name: Zip source
         run: |
           zip -r release-assets/source.zip . \
-              -x ".git/*" "dist/*" "build/*" ".venv/*" "logs/*"
+            -x ".git/*" "dist/*" "build/*" ".venv/*" "logs/*"
 
       - name: Publish prerelease
         uses: softprops/action-gh-release@v2
