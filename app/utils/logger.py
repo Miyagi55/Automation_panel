@@ -4,8 +4,9 @@ Centralized logging module for consistent logging across the application.
 
 import datetime
 import logging
-from pathlib import Path
 from typing import Any, Callable
+
+from app.utils.config import LOG_DIR
 
 
 class Logger:
@@ -27,12 +28,11 @@ class Logger:
         self.ui_callback = None
 
         # Ensure logs directory exists
-        logs_dir = Path("logs")
-        logs_dir.mkdir(exist_ok=True)
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
 
         # Generate log filename with date
         today = datetime.datetime.now().strftime("%Y-%m-%d")
-        log_file = logs_dir / f"automation_panel_{today}.log"
+        log_file = LOG_DIR / f"automation_panel_{today}.log"
 
         # Set up Python's logging
         self.logger = logging.getLogger("automation_panel")
