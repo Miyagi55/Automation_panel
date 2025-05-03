@@ -1,4 +1,4 @@
-name: Windows Build & Packaging
+name: PyInstaller Auto-Release
 
 on:
   push:
@@ -9,60 +9,68 @@ permissions:
   contents: write
 
 jobs:
-  build-windows:
-    name: Build & Package on Windows
+  build:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10"]
 
     steps:
       # 1) Checkout
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # 2) Install uv (pin to 0.7.2) and enable cache on uv.lock
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
+      # 2) Setup Python
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
         with:
-          version: '0.7.2'
-          enable-cache: true
-          cache-dependency-glob: 'uv.lock'
+          python-version: ${{ matrix.python-version }}
 
-      # 3) Ensure virtual environment seeded with pip
-      - name: Step 1: Create venv seeded with pip
-        run: uv venv --seed
+      # 3) Install project & PyInstaller
+      - name: Install project & PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pyinstaller
 
-      # 4) Sync project dependencies into the venv
-      - name: Step 3: Sync project deps
-        run: uv sync
+      # 4) Build binary
+      - name: Build binary
+        run: |
+          pyinstaller --noconfirm --onefile app.py --name AutomationPanel-windows
 
-      # 5) Install build tools (pip & PyInstaller) into the venv
-      - name: Step 4: Install pip & PyInstaller
-        run: uv pip install --upgrade pip pyinstaller
-
-      # 6) Clean previous dist/build/spec artifacts
-      - name: Step 5: Clean old dist/build/spec
+      # 5) Prepare upload dir & move exe
+      - name: Rename binary for Windows
         shell: cmd
         run: |
-          if exist dist\AutomationPanel-windows rmdir /S /Q dist\AutomationPanel-windows
-          if exist build rmdir /S /Q build
-          if exist AutomationPanel-windows.spec del AutomationPanel-windows.spec
+          mkdir upload
+          move dist\AutomationPanel-windows.exe upload\AutomationPanel-windows.exe
 
-      # 7) Run PyInstaller from within the venv
-      - name: Step 6: Run PyInstaller (--onedir)
-        shell: cmd
-        run: uv run python -m PyInstaller ^
-          --noconsole ^
-          --onedir ^
-          --name AutomationPanel-windows ^
-          --hidden-import=playwright_stealth ^
-          --hidden-import=patchright ^
-          --hidden-import=psutil ^
-          --hidden-import=tkinter ^
-          --hidden-import=customtkinter ^
-          app.py
-
-      # 8) Upload the resulting dist folder as artifact
-      - name: Upload dist artifact
+      # 6) Upload artifact
+      - name: Upload Windows binary
         uses: actions/upload-artifact@v4
         with:
           name: AutomationPanel-windows
-          path: dist/AutomationPanel-windows
+          path: upload\AutomationPanel-windows.exe
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: AutomationPanel-windows
+          path: release-assets
+
+      - name: Set release name
+        id: rel
+        run: echo "name=build-$(date +'%Y%m%d-%H%M%S')" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.rel.outputs.name }}
+          name: ${{ steps.rel.outputs.name }}
+          prerelease: true
+          files: release-assets/AutomationPanel-windows.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
