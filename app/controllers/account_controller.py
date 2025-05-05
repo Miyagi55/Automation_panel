@@ -67,9 +67,12 @@ class AccountController:
         user = account["user"]
         success = self.account_model.delete_account(account_id)
 
-        if success:
+        if success[0]:
             logger.info(
                 f"Deleted account: {user} (ID: {account_id}, Total: {len(self.account_model.accounts)})"
+            )
+            logger.info(
+                f"Deleted session: {success[1]}"
             )
             if self.update_ui_callback:
                 self.update_ui_callback()
@@ -230,19 +233,12 @@ class AccountController:
                             "Feed Simulated",
                             "Successful login and feed simulation"
                         )
-                    elif login_success:
-                        self.update_account_status(
-                            account_id,
-                            "Logged In",
-                            "Simulation Failed",
-                            "Logged in but feed simulation failed"
-                        )
-                    else:
+                    else:  # Modified to require both login_success and sim_success for "Logged In" status
                         self.update_account_status(
                             account_id,
                             "Login Failed",
                             "Inactive",
-                            "Failed to login or not logged in"
+                            "Failed to login or feed simulation failed"
                         )
             except Exception as e:
                 logger.error(f"Error running login sessions: {str(e)}")

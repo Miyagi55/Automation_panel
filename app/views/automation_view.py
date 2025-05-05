@@ -493,7 +493,7 @@ class AutomationView(BaseView):
         )
 
         if success:
-            self.start_btn.configure(state="disabled")
+            self.start_btn.configure(state="normal")
             self.stop_btn.configure(state="normal")
             logger.info(f"Started automation with {len(selected_workflows)} workflows.")
 
