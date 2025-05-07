@@ -69,6 +69,9 @@ class LikeAction(AutomationAction):
         finally:
             await browser_utils.cleanup_browser(created_browser, browser, playwright)
 
+
+
+
     async def _navigate_to_url(self, page: Any, url: str) -> bool:
         """Navigate to the specified URL."""
         try:
@@ -77,6 +80,9 @@ class LikeAction(AutomationAction):
         except Exception as e:
             self._log_error(f"Navigation failed: {str(e)}")
             return False
+
+
+
 
     async def _wait_for_post_overlay(self, page: Any, debug: bool) -> Optional[Any]:
         """Wait for the post overlay to load, if present."""
@@ -111,6 +117,9 @@ class LikeAction(AutomationAction):
         self._log_info("No overlay detected after 3 attempts")
         return None
 
+
+
+
     async def _find_like_button(self, overlay: Any, debug: bool) -> Tuple[Optional[Any], Optional[str]]:
         """Find the Like or React button in the overlay."""
         start_time = asyncio.get_event_loop().time()
@@ -140,6 +149,9 @@ class LikeAction(AutomationAction):
             if asyncio.get_event_loop().time() - start_time > timeout:
                 self._log_info("Timeout reached while finding Like button")
                 return None, None
+
+
+
 
     async def _find_like_button_on_main_page(self, page: Any, debug: bool) -> Tuple[Optional[Any], Optional[str]]:
         """Scroll the main page once by 280 pixels and find the Like button."""
@@ -173,6 +185,9 @@ class LikeAction(AutomationAction):
             self._log_error(f"Error finding Like button on main page: {str(e)}")
             return None, None
 
+
+
+
     async def _evaluate_button_state(
         self, btn: Any, selectors: list, debug: bool, is_main_page: bool = False
     ) -> Tuple[Optional[Any], Optional[str]]:
@@ -195,6 +210,9 @@ class LikeAction(AutomationAction):
                 self._log_error(f"Error evaluating {selector['name']} button: {str(e)}")
         return None, None
 
+
+
+
     async def _ensure_element_in_viewport(self, btn: Any, name: str, debug: bool) -> None:
         """Ensure the button is in the viewport."""
         await btn.evaluate("el => el.scrollIntoView({block: 'center', inline: 'center', behavior: 'smooth'})")
@@ -211,10 +229,16 @@ class LikeAction(AutomationAction):
                 self._log_info(f"{name} button bounding box: x={box['x']}, y={box['y']}, width={box['width']}, height={box['height']}")
                 self._log_info(f"{name} button in viewport: {in_viewport}")
 
+
+
+
     async def _log_button_debug_info(self, btn: Any, name: str, text_content: str, aria_label: str, is_enabled: bool) -> None:
         """Log debug information for a button."""
         is_visible = await btn.is_visible()
         self._log_info(f"{name} button - Text: {text_content}, Aria-label: {aria_label}, Visible: {is_visible}, Enabled: {is_enabled}")
+
+
+
 
     async def _click_button(self, button: Any, button_name: str, debug: bool) -> bool:
         """Attempt to click the specified button using multiple methods."""
@@ -250,6 +274,9 @@ class LikeAction(AutomationAction):
             self._log_error(f"Error during click attempt for {button_name} button: {str(e)}")
             return False
 
+
+
+
     async def _attempt_click_methods(
         self, click_fn: Callable, button_name: str, method_name: str, attempt: int, debug: bool
     ) -> bool:
@@ -264,6 +291,9 @@ class LikeAction(AutomationAction):
         except Exception as e:
             self._log_error(f"{method_name.capitalize()} failed (attempt {attempt + 1}): {str(e)}")
             return False
+
+
+
 
     async def _verify_and_cleanup(
         self, page: Any, button: Any, created_browser: bool, browser: Any, debug: bool
@@ -290,14 +320,21 @@ class LikeAction(AutomationAction):
             self._log_error(f"Failed to verify Like action: {str(e)}")
         return True
 
+
+
+
     def _log_info(self, message: str) -> None:
         """Log an info message with account ID."""
         if hasattr(self, '_log_func') and hasattr(self, '_account_id'):
             self._log_func(f"{message} for account {self._account_id}")
 
+
+
     def _log_error(self, message: str) -> None:
         """Log an error message with account ID."""
         self._log_info(f"Error: {message}")
+
+
 
     def __init_log(self, account_id: str, log_func: Callable[[str], None]) -> None:
         """Initialize logging attributes."""
