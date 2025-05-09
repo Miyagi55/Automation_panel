@@ -1,6 +1,8 @@
 from asyncio import sleep
 from random import uniform
 
+from app.utils.logger import logger
+
 
 class Randomizer:
     """Base randomizer"""
@@ -11,4 +13,6 @@ class Randomizer:
 
     @staticmethod
     async def sleep(a: float, b: float):
-        await sleep(Randomizer.delay(a, b))
+        delay_val = Randomizer.delay(a, b)
+        logger.info(f"Sleeping for {delay_val:.2f} seconds")
+        await sleep(delay_val)
