@@ -1,3 +1,4 @@
+import random
 from typing import Any, Callable, Dict, Optional
 
 from app.utils.config import (
@@ -102,7 +103,10 @@ class AutomationHandler:
                         progress_callback(completed_operations / total_operations)
                     continue
 
-                for action_name, action_config in action_configs.items():
+                # Randomize the order of actions for this account
+                actions_items = list(action_configs.items())
+                random.shuffle(actions_items)
+                for action_name, action_config in actions_items:
                     if action_name not in self.actions:
                         log_func(f"Unknown action: {action_name}, skipping")
                         completed_operations += 1
