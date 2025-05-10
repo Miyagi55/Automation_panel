@@ -57,6 +57,9 @@ class AutomationHandler:
             log_func(f"Could not find any valid accounts for workflow: {workflow_name}")
             return False
 
+        # Randomize account order for a more random action distribution
+        random.shuffle(account_ids)
+
         log_func(
             f"Executing workflow {workflow_name} on {len(account_ids)} accounts with {len(action_configs)} actions"
         )
