@@ -5,12 +5,10 @@ Browser manager for handling Playwright browser sessions.
 import os
 import subprocess
 import time
-from pathlib import Path
 from typing import Callable, Optional
-from app.utils.config import ROOT, SESSIONS
 
-
-
+from app.utils.config import BROWSER_MANAGER_PROGRESS_DELAY, SESSIONS
+from app.utils.randomizer import Randomizer
 
 
 class WebdriverManager:
@@ -19,7 +17,6 @@ class WebdriverManager:
     def __init__(self, log_func: Callable[[str], None]):
         self._webdriver_path: Optional[str] = None
         self._initialize_path(log_func)
-
 
     def _initialize_path(self, log_func: Callable[[str], None]) -> None:
         """Set webdriver path if it exists."""
@@ -35,8 +32,9 @@ class WebdriverManager:
             self._webdriver_path = path
             log_func(f"Webdriver path initialized: {self._webdriver_path}")
 
-
-    def _find_chromium_dir(self, base_path: str, log_func: Callable[[str], None]) -> Optional[str]:
+    def _find_chromium_dir(
+        self, base_path: str, log_func: Callable[[str], None]
+    ) -> Optional[str]:
         """Find the Chromium directory in the webdriver path."""
         try:
             for subdir in os.listdir(base_path):
@@ -49,7 +47,9 @@ class WebdriverManager:
             log_func(f"Error finding Chromium directory: {str(e)}")
             return None
 
-    def _verify_chromium_executable(self, chromium_dir: str, log_func: Callable[[str], None]) -> bool:
+    def _verify_chromium_executable(
+        self, chromium_dir: str, log_func: Callable[[str], None]
+    ) -> bool:
         """Verify the Chromium executable exists."""
         chromium_path = os.path.join(chromium_dir, "chrome-win", "chrome.exe")
         exists = os.path.exists(chromium_path)
@@ -57,12 +57,10 @@ class WebdriverManager:
             log_func(f"Chromium executable not found at: {chromium_path}")
         return exists
 
-
     @property
     def webdriver_path(self) -> Optional[str]:
         """Get the current webdriver path."""
         return self._webdriver_path
-
 
     def install_webdrivers(
         self,
@@ -88,10 +86,14 @@ class WebdriverManager:
 
         # Verify installation
         home_dir = os.path.expanduser("~")
-        self._webdriver_path = os.path.join(home_dir, "AppData", "Local", "ms-playwright")
+        self._webdriver_path = os.path.join(
+            home_dir, "AppData", "Local", "ms-playwright"
+        )
 
         chromium_dir = self._find_chromium_dir(self._webdriver_path, log_func)
-        if not chromium_dir or not self._verify_chromium_executable(chromium_dir, log_func):
+        if not chromium_dir or not self._verify_chromium_executable(
+            chromium_dir, log_func
+        ):
             log_func("Invalid or missing webdriver installation")
             update_progress("Error: Installation incomplete", 1.0)
             return False
@@ -100,9 +102,7 @@ class WebdriverManager:
         log_func(f"Webdrivers installed at: {self._webdriver_path}")
         return True
 
-
     def _run_playwright_install(self, log_func: Callable[[str], None]) -> bool:
-        
         try:
             process = subprocess.run(
                 ["playwright", "install", "--with-deps"],
@@ -116,16 +116,12 @@ class WebdriverManager:
             log_func(f"Installation failed: {e.stderr}")
             return False
 
-
     def _simulate_progress(self, update_progress: Callable[[str, float], None]) -> None:
-        
         for i in range(1, 10):
-            time.sleep(0.5)
+            time.sleep(Randomizer.delay(*BROWSER_MANAGER_PROGRESS_DELAY))
             update_progress("Downloading...", 0.1 + i * 0.09)
 
-
     def get_chromium_executable(self, log_func: Callable[[str], None]) -> Optional[str]:
-        
         if not self._webdriver_path:
             log_func("Webdriver path not set")
             return None
@@ -140,11 +136,6 @@ class WebdriverManager:
             return None
 
         return chromium_path
-
-
-
-
-
 
 
 class BrowserManager:
