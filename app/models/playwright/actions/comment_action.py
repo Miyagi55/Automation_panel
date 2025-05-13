@@ -1,13 +1,64 @@
 import asyncio
 import random
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from ..base_action import AutomationAction
 from ..browser_manager import BrowserManager
 
 
+class CommentButtonLocator:
+    """Handles detection and clicking of the Comment button for videos and live posts."""
 
-#------------------------------------class------------------------------------------------------------#
+    @staticmethod
+    async def find_and_click_comment_button(
+        page: Any, debug: bool, account_id: str, log_func: Callable[[str], None]
+    ) -> bool:
+        """Find and click the Comment button on the main page after scrolling."""
+        log_func(f"Scrolling to find Comment button for account {account_id}")
+        await page.evaluate("window.scrollBy(0, 300)")  # Small scroll to reveal button
+        await asyncio.sleep(1.0)
+
+        comment_button_selectors = [
+            '[aria-label="Comment" i], [aria-label="Comentar" i]',  # Prioritize aria-label
+            '[role="button"]:has-text("Comment"), [role="button"]:has-text("Comentar")',  # Text-based fallback
+        ]
+
+        for attempt in range(3):
+            for selector in comment_button_selectors:
+                try:
+                    log_func(f"Attempt {attempt + 1}: Trying Comment button selector {selector} for account {account_id}")
+                    button = await page.wait_for_selector(selector, timeout=5000)
+                    if button:
+                        is_enabled = await button.is_enabled()
+                        is_visible = await button.is_visible()
+                        is_js_visible = await button.evaluate(
+                            """el => {
+                                const rect = el.getBoundingClientRect();
+                                return rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).display !== 'none';
+                            }"""
+                        )
+                        if debug:
+                            log_func(
+                                f"Comment button found with selector {selector}: Visible={is_visible}, JS_Visible={is_js_visible}, Enabled={is_enabled} for account {account_id}"
+                            )
+                        if is_enabled and (is_visible or is_js_visible):
+                            await button.click()
+                            log_func(f"Clicked Comment button with selector {selector} for account {account_id}")
+                            await asyncio.sleep(1.0)  # Wait for comment field to appear
+                            return True
+                        log_func(f"Comment button not interactable (Visible={is_visible}, JS_Visible={is_js_visible}) for account {account_id}")
+                    else:
+                        log_func(f"Selector {selector} returned no element for account {account_id}")
+                except Exception as e:
+                    log_func(f"Attempt {attempt + 1}: Comment button selector {selector} failed: {str(e)} for account {account_id}")
+            if attempt < 2:
+                log_func(f"Waiting 2s before retrying Comment button for account {account_id}")
+                await asyncio.sleep(2.0)
+
+        log_func(f"No Comment button found after 3 attempts, proceeding to find comment field for account {account_id}")
+        return False  # Allow proceeding to comment field detection
+
+
 class CommentFieldLocator:
     """Handles detection of post overlays and comment fields."""
 
@@ -15,7 +66,7 @@ class CommentFieldLocator:
     async def wait_for_post_overlay(
         page: Any, debug: bool, account_id: str, log_func: Callable[[str], None]
     ) -> Optional[Any]:
-        """Wait for Kardashian for post overlay to load, if present."""
+        """Wait for post overlay to load, if present."""
         log_func(f"Checking for post overlay for account {account_id}")
         for attempt in range(4):
             try:
@@ -49,9 +100,9 @@ class CommentFieldLocator:
 
     @staticmethod
     async def find_comment_field(
-        context: Any, debug: bool, account_id: str, log_func: Callable[[str], None]
+        context: Any, is_video: bool, debug: bool, account_id: str, log_func: Callable[[str], None]
     ) -> Optional[Any]:
-        """Find the comment field in the given context (overlay or main page)."""
+        """Find the comment field in the given context (overlay, main page, or video/live-specific)."""
         comment_selectors = [
             'div[aria-label*="Write a comment" i], div[aria-label*="Escribe un comentario" i]',
             'div[role="textbox"][contenteditable="true"]',
@@ -99,9 +150,6 @@ class CommentFieldLocator:
         return None
 
 
-
-
-#------------------------------------class------------------------------------------------------------#
 class CommentWriter:
     """Handles typing and submitting comments."""
 
@@ -127,9 +175,6 @@ class CommentWriter:
         log_func(f"Posted comment for account {account_id}: '{comment_text}'")
 
 
-
-
-#------------------------------------class------------------------------------------------------------#
 class CommentVerifier:
     """Verifies that a comment was posted successfully."""
 
@@ -152,18 +197,15 @@ class CommentVerifier:
             return False
 
 
-
-
-
-#------------------------------------class------------------------------------------------------------#
 class CommentAction(AutomationAction):
-    """Automation action for commenting on Facebook posts."""
+    """Automation action for commenting on Facebook posts, videos, and live streams."""
 
     def __init__(self):
         super().__init__("Comments")
         self._field_locator = CommentFieldLocator()
         self._comment_writer = CommentWriter()
         self._comment_verifier = CommentVerifier()
+        self._button_locator = CommentButtonLocator()
 
     async def execute(
         self,
@@ -173,7 +215,7 @@ class CommentAction(AutomationAction):
         log_func: Callable[[str], None],
         browser: Optional[Any] = None,
     ) -> bool:
-        """Execute the comment action on a post."""
+        """Execute the comment action on a post, video, or live stream."""
         comment_text = await self._load_comment_text(action_data, account_id, log_func)
         if not comment_text:
             return False
@@ -204,8 +246,6 @@ class CommentAction(AutomationAction):
         finally:
             await self._cleanup_browser(created_browser, browser, playwright, account_id, log_func)
 
-
-
     async def _load_comment_text(
         self, action_data: Dict[str, Any], account_id: str, log_func: Callable[[str], None]
     ) -> Optional[str]:
@@ -216,6 +256,9 @@ class CommentAction(AutomationAction):
             log_func(f"No URL provided for Comment action on account {account_id}")
             return None
 
+
+
+################# Default messages in case there is no comments uploaded!!!!####################################
         comments = ["Great post!", "Nice!", "Thanks for sharing!"]
         if comments_file:
             try:
@@ -228,15 +271,13 @@ class CommentAction(AutomationAction):
 
         return random.choice(comments)
 
-
-
     async def _setup_browser(
         self,
         account_id: str,
         action_data: Dict[str, Any],
         browser: Optional[Any],
         log_func: Callable[[str], None],
-    ) -> tuple[Optional[Any], Optional[Any], bool, Optional[Any]]:
+    ) -> Tuple[Optional[Any], Optional[Any], bool, Optional[Any]]:
         """Set up the browser and page for the comment action."""
         browser_manager = BrowserManager()
         chromium_exe = browser_manager.get_chromium_executable(log_func)
@@ -274,8 +315,6 @@ class CommentAction(AutomationAction):
             await self._cleanup_browser(created_browser, browser, playwright, account_id, log_func)
             return None, None, False, None
 
-
-
     async def _navigate_to_post(
         self, page: Any, url: str, account_id: str, log_func: Callable[[str], None]
     ) -> bool:
@@ -288,21 +327,49 @@ class CommentAction(AutomationAction):
             return False
         return True
 
+    async def _detect_post_type(
+        self, page: Any, debug: bool, account_id: str, log_func: Callable[[str], None]
+    ) -> str:
+        """Detect if the post is a normal post, video, or live stream."""
+        try:
+            # Check for video
+            video_element = await page.query_selector('video')
+            if video_element:
+                log_func(f"Detected video post for account {account_id}")
+                return "video"
 
+            # Check for live indicators
+            live_indicator = await page.query_selector('[aria-label*="Live" i], [class*="live"]')
+            if live_indicator:
+                log_func(f"Detected live post for account {account_id}")
+                return "live"
+
+            log_func(f"Detected normal post for account {account_id}")
+            return "normal"
+        except Exception as e:
+            log_func(f"Error detecting post type for account {account_id}: {str(e)}")
+            return "normal"  # Fallback to normal post
 
     async def _locate_comment_field(
         self, page: Any, debug: bool, account_id: str, log_func: Callable[[str], None]
     ) -> Optional[Any]:
-        """Locate the comment field, checking for overlays or main page."""
-        overlay = await self._field_locator.wait_for_post_overlay(page, debug, account_id, log_func)
-        if overlay:
-            log_func(f"Overlay found, searching for comment field for account {account_id}")
-            return await self._field_locator.find_comment_field(overlay, debug, account_id, log_func)
-        
-        log_func(f"No overlay found, searching main page for comment field for account {account_id}")
-        return await self._field_locator.find_comment_field(page, debug, account_id, log_func)
+        """Locate the comment field, handling normal posts, videos, and live streams."""
+        post_type = await self._detect_post_type(page, debug, account_id, log_func)
 
-
+        if post_type == "normal":
+            # Try overlay for normal posts
+            overlay = await self._field_locator.wait_for_post_overlay(page, debug, account_id, log_func)
+            if overlay:
+                log_func(f"Overlay found, searching for comment field for account {account_id}")
+                return await self._field_locator.find_comment_field(overlay, False, debug, account_id, log_func)
+            log_func(f"No overlay found, searching main page for comment field for account {account_id}")
+            return await self._field_locator.find_comment_field(page, False, debug, account_id, log_func)
+        else:
+            # Handle videos and lives
+            await self._button_locator.find_and_click_comment_button(page, debug, account_id, log_func)
+            # For lives, the comment field appears on the right; for videos, it’s already visible
+            context = page
+            return await self._field_locator.find_comment_field(context, False, debug, account_id, log_func)
 
     async def _cleanup_browser(
         self,
