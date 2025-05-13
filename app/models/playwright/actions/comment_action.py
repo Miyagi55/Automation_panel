@@ -200,6 +200,9 @@ class CommentVerifier:
 class CommentAction(AutomationAction):
     """Automation action for commenting on Facebook posts, videos, and live streams."""
 
+    # Track used comments to avoid repetition within the workflow
+    _used_comments: set = set()
+
     def __init__(self):
         super().__init__("Comments")
         self._field_locator = CommentFieldLocator()
@@ -236,6 +239,9 @@ class CommentAction(AutomationAction):
 
             await self._comment_writer.submit_comment(page, comment_field, comment_text, account_id, log_func)
 
+            # Mark the comment as used after successful submission
+            self._used_comments.add(comment_text)
+
             return await self._comment_verifier.verify_comment(
                 page, comment_text, action_data.get("debug", True), account_id, log_func
             )
@@ -249,16 +255,13 @@ class CommentAction(AutomationAction):
     async def _load_comment_text(
         self, action_data: Dict[str, Any], account_id: str, log_func: Callable[[str], None]
     ) -> Optional[str]:
-        """Load a random comment from the provided file or default comments."""
+        """Load a random unused comment from the provided file or default comments."""
         url = action_data.get("link", "")
         comments_file = action_data.get("comments_file", None)
         if not url:
             log_func(f"No URL provided for Comment action on account {account_id}")
             return None
 
-
-
-################# Default messages in case there is no comments uploaded!!!!####################################
         comments = ["Great post!", "Nice!", "Thanks for sharing!"]
         if comments_file:
             try:
@@ -269,7 +272,14 @@ class CommentAction(AutomationAction):
             except Exception as e:
                 log_func(f"Error loading comments file for account {account_id}: {str(e)}")
 
-        return random.choice(comments)
+        # Filter out used comments
+        available_comments = [c for c in comments if c not in self._used_comments]
+        if not available_comments:
+            log_func(f"No unused comments available for account {account_id}")
+            return None
+
+        # Select a random unused comment
+        return random.choice(available_comments)
 
     async def _setup_browser(
         self,
