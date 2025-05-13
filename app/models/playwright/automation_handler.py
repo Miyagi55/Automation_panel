@@ -1,11 +1,14 @@
-import asyncio
 import random
 from typing import Any, Callable, Dict, Optional
 
-from .base_action import AutomationAction
-from .browser_manager import BrowserManager
+from app.utils.config import (
+    AUTOMATION_ACCOUNT_DELAY_RANGE,
+    AUTOMATION_ACTION_DELAY_RANGE,
+)
+from app.utils.randomizer import Randomizer
+
+from .actions import CommentAction, LikeAction
 from .session_handler import SessionHandler
-from .actions import LikeAction, CommentAction
 
 
 class AutomationHandler:
@@ -19,7 +22,7 @@ class AutomationHandler:
             "Comments": CommentAction(),
         }
         self.session_handler = SessionHandler()
-        self.playwright = None
+        self.playwright: Optional[Any] = None
 
     async def execute_workflow(
         self,
@@ -54,6 +57,9 @@ class AutomationHandler:
             log_func(f"Could not find any valid accounts for workflow: {workflow_name}")
             return False
 
+        # Randomize account order for a more random action distribution
+        random.shuffle(account_ids)
+
         log_func(
             f"Executing workflow {workflow_name} on {len(account_ids)} accounts with {len(action_configs)} actions"
         )
@@ -66,34 +72,48 @@ class AutomationHandler:
                 account_data = accounts[account_id]
 
                 result = await self.session_handler.open_sessions(
-                    account_id, log_func, keep_browser_open_seconds=0, skip_simulation=True
+                    account_id,
+                    log_func,
+                    keep_browser_open_seconds=0,
+                    skip_simulation=True,
                 )
                 log_func(f"Session result for account {account_id}: {result}")
                 is_logged_in, sim_success = result.get(account_id, (False, False))
 
-                browser = self.session_handler.batch_processor.get_browser_context(account_id)
+                browser = self.session_handler.batch_processor.get_browser_context(
+                    account_id
+                )
                 if not browser:
                     log_func(f"No browser context available for account {account_id}")
                     is_logged_in = False
 
                 if not is_logged_in:
-                    log_func(f"Error: Account {account_id} is not logged in, skipping actions")
-                    if browser and not (hasattr(browser, '_closed') and browser._closed):
+                    log_func(
+                        f"Error: Account {account_id} is not logged in, skipping actions"
+                    )
+                    if browser and not (
+                        hasattr(browser, "_closed") and browser._closed
+                    ):
                         try:
                             await browser.close()
                             log_func(f"Closed browser for account {account_id}")
                         except Exception as e:
-                            log_func(f"Error closing browser for account {account_id}: {str(e)}")
+                            log_func(
+                                f"Error closing browser for account {account_id}: {str(e)}"
+                            )
                     completed_operations += len(action_configs)
-                    if progress_callback:
+                    if progress_callback is not None:
                         progress_callback(completed_operations / total_operations)
                     continue
 
-                for action_name, action_config in action_configs.items():
+                # Randomize the order of actions for this account
+                actions_items = list(action_configs.items())
+                random.shuffle(actions_items)
+                for action_name, action_config in actions_items:
                     if action_name not in self.actions:
                         log_func(f"Unknown action: {action_name}, skipping")
                         completed_operations += 1
-                        if progress_callback:
+                        if progress_callback is not None:
                             progress_callback(completed_operations / total_operations)
                         continue
 
@@ -109,30 +129,34 @@ class AutomationHandler:
                     )
 
                     completed_operations += 1
-                    if progress_callback:
+                    if progress_callback is not None:
                         progress_callback(completed_operations / total_operations)
 
-                    await asyncio.sleep(random.uniform(2.0, 5.0))
+                    await Randomizer.sleep(*AUTOMATION_ACTION_DELAY_RANGE)
 
-                if browser and not (hasattr(browser, '_closed') and browser._closed):
+                if browser and not (hasattr(browser, "_closed") and browser._closed):
                     try:
                         await browser.close()
                         log_func(f"Closed browser for account {account_id}")
                     except Exception as e:
-                        log_func(f"Error closing browser for account {account_id}: {str(e)}")
+                        log_func(
+                            f"Error closing browser for account {account_id}: {str(e)}"
+                        )
 
-                await asyncio.sleep(random.uniform(5.0, 10.0))
+                await Randomizer.sleep(*AUTOMATION_ACCOUNT_DELAY_RANGE)
 
         except Exception as e:
             log_func(f"Error during workflow {workflow_name}: {str(e)}")
             return False
         finally:
-            if self.playwright:
+            if self.playwright is not None:
                 try:
                     await self.playwright.__aexit__(None, None, None)
                     log_func(f"Closed Playwright instance for workflow {workflow_name}")
                 except Exception as e:
-                    log_func(f"Error closing Playwright instance for workflow {workflow_name}: {str(e)}")
+                    log_func(
+                        f"Error closing Playwright instance for workflow {workflow_name}: {str(e)}"
+                    )
                 self.playwright = None
 
         log_func(f"Completed workflow: {workflow_name}")
