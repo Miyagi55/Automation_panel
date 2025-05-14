@@ -2,10 +2,9 @@ import re
 from typing import Any, Callable, Dict, Optional
 
 from app.models.playwright.actions.browser_utils import BrowserUtils
-
-# Import base_action using absolute import instead of relative
-from app.models.playwright.base_action import AutomationAction
 from app.utils.randomizer import Randomizer
+
+from ..base_action import AutomationAction
 
 
 class ShareAction(AutomationAction):
@@ -60,7 +59,7 @@ class ShareAction(AutomationAction):
                 log_func(f"Navigation error (continuing anyway): {str(e)}")
                 # Try to continue even if there was a navigation error
 
-            await Randomizer.sleep(2.0, 3.0)
+            await Randomizer.sleep(3.0, 5.0)
 
             # 1) Find and click the share button to open dialog
             share_selector = 'div[role="button"][aria-label="Send this to friends or post it on your profile."]'
@@ -78,18 +77,25 @@ class ShareAction(AutomationAction):
                 )
                 log_func(f"Clicked share dialog button for account {account_id}")
 
-                # Wait for dialog to appear
-                await Randomizer.sleep(0.7, 1.5)
+                # Define the 'Share now' selector for dialog
+                share_now_selector = 'div[role="button"][aria-label="Share now"]'
+
+                # Wait for dialog to render and appear
+                await Randomizer.sleep(1.0, 2.5)
+                try:
+                    await page.wait_for_selector(share_now_selector, timeout=10000)
+                    log_func("Share dialog fully rendered")
+                except Exception as e:
+                    log_func(f"Share dialog did not render in time: {str(e)}")
 
                 # 2) Find and click the "Share now" button in the dialog
-                share_now_selector = 'div[role="button"][aria-label="Share now"]'
                 log_func(
                     f"Looking for 'Share now' button with selector: {share_now_selector}"
                 )
 
                 # Try multiple times with increasing wait times to find the Share now button
                 share_now_btn = None
-                max_attempts = 3
+                max_attempts = 5
                 for attempt in range(max_attempts):
                     share_now_btn = await page.query_selector(share_now_selector)
                     if share_now_btn:
@@ -97,7 +103,7 @@ class ShareAction(AutomationAction):
                     log_func(
                         f"'Share now' button not found on attempt {attempt+1}, waiting..."
                     )
-                    await Randomizer.sleep(0.5 * (attempt + 1), 1.0 * (attempt + 1))
+                    await Randomizer.sleep(1.0 * (attempt + 1), 1.5 * (attempt + 1))
 
                 if share_now_btn:
                     # Click the "Share now" button
@@ -107,7 +113,7 @@ class ShareAction(AutomationAction):
                     log_func(f"Clicked 'Share now' button for account {account_id}")
 
                     # Wait for share confirmation
-                    await Randomizer.sleep(1.0, 2.0)
+                    await Randomizer.sleep(2.0, 4.0)
 
                     # Verify the share was successful (look for success indicators)
                     # We don't use a complex selector here to avoid syntax issues
