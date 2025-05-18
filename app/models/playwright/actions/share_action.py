@@ -2,9 +2,8 @@ import re
 from typing import Any, Callable, Dict, Optional
 
 from app.models.playwright.actions.browser_utils import BrowserUtils
+from app.models.playwright.base_action import AutomationAction
 from app.utils.randomizer import Randomizer
-
-from ..base_action import AutomationAction
 
 
 class ShareAction(AutomationAction):
