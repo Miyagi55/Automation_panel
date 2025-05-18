@@ -33,8 +33,14 @@ class ShareAction(AutomationAction):
             url = extracted_url
             log_func(f"Extracted URL from input: {url}")
 
-        if not url or not url.startswith(("http://", "https://")):
-            log_func(f"No valid URL provided for Share action on account {account_id}")
+        if not url:
+            log_func(f"No URL provided for Share action on account {account_id}")
+            return False
+
+        if not url.startswith("http://") and not url.startswith("https://"):
+            log_func(
+                f"URL does not start with http:// or https:// for account {account_id}"
+            )
             return False
 
         browser_utils = BrowserUtils(account_id, log_func)
@@ -61,6 +67,110 @@ class ShareAction(AutomationAction):
 
             await Randomizer.sleep(3.0, 5.0)
 
+            # Implementing the more reliable approach based on the JS snippet
+            log_func("Using improved dialog detection method")
+
+            # Execute the JS to find and interact with the share dialog
+            success = await self._execute_share_js(page, log_func)
+
+            if success:
+                log_func(
+                    f"Share operation completed successfully for account {account_id}"
+                )
+                return True
+            else:
+                # Fallback to the original method if JS approach fails
+                log_func("Falling back to original method")
+                return await self._legacy_share_method(page, account_id, log_func)
+
+        except Exception as e:
+            log_func(f"Error during Share action: {str(e)}")
+            return False
+        finally:
+            await browser_utils.cleanup_browser(created_browser, browser, playwright)
+
+    async def _execute_share_js(
+        self, page: Any, log_func: Callable[[str], None]
+    ) -> bool:
+        """Execute improved JavaScript approach to share a post."""
+        try:
+            # Run the JavaScript to find the dialog and share buttons
+            result = await page.evaluate("""() => {
+                return new Promise((resolve) => {
+                    // Find the visible post dialog
+                    const postDialog = Array.from(
+                        document.querySelectorAll('div[role="dialog"][aria-labelledby]')
+                    ).find(dlg => dlg.offsetParent !== null);
+                    
+                    if (!postDialog) {
+                        console.warn('❌ No post dialog found');
+                        resolve({success: false, error: 'No post dialog found'});
+                        return;
+                    }
+                    
+                    // Find the share button in the dialog
+                    const openBtn = postDialog.querySelector(
+                        '[role="button"][aria-label^="Send this to"],' +
+                        '[role="button"][aria-label^="Envía esto a"]'
+                    );
+                    
+                    if (!openBtn) {
+                        console.warn('❌ Share button not found in dialog');
+                        resolve({success: false, error: 'Share button not found in dialog'});
+                        return;
+                    }
+                    
+                    // Click the button to open the share dialog
+                    openBtn.dispatchEvent(new MouseEvent('click', {
+                        bubbles: true,
+                        cancelable: true,
+                        view: window
+                    }));
+                    
+                    // Wait for the Share Now button to appear and click it
+                    setTimeout(() => {
+                        const shareNowBtn = document.querySelector(
+                            'div[role="button"][aria-label="Share now"], ' +
+                            'div[role="button"][aria-label="Compartir ahora"]'
+                        );
+                        
+                        if (shareNowBtn) {
+                            shareNowBtn.dispatchEvent(new MouseEvent('click', {
+                                bubbles: true,
+                                cancelable: true,
+                                view: window
+                            }));
+                            
+                            setTimeout(() => {
+                                resolve({success: true});
+                            }, 1000);
+                        } else {
+                            console.warn('❌ Share Now button not found');
+                            resolve({success: false, error: 'Share Now button not found'});
+                        }
+                    }, 1000); // Wait 1 second for dialog to appear
+                });
+            }""")
+
+            log_func(f"JavaScript execution result: {result}")
+
+            # Wait a bit for the share action to complete
+            await Randomizer.sleep(3.0, 5.0)
+
+            return result.get("success", False)
+
+        except Exception as e:
+            log_func(f"Error in JavaScript share execution: {str(e)}")
+            return False
+
+    async def _legacy_share_method(
+        self, page: Any, account_id: str, log_func: Callable[[str], None]
+    ) -> bool:
+        """Legacy method for sharing posts as fallback."""
+        try:
+            # Log all dialogs to help with debugging
+            await self._log_visible_dialogs(page, log_func)
+
             # 1) Find and click the share button to open dialog
             share_selector = (
                 'div[role="button"][aria-label="Send this to friends or post it on your profile."], '
@@ -68,11 +178,30 @@ class ShareAction(AutomationAction):
             )
             log_func(f"Looking for share button with selector: {share_selector}")
 
-            # Try multiple methods to find the share button
-            share_btn = await self._find_element(page, share_selector, log_func)
+            # First look for the button in visible dialog if present
+            share_btn = await self._find_button_in_visible_dialog(
+                page,
+                '[role="button"][aria-label^="Send this to friends"], [role="button"][aria-label^="Envía esto a tus amigos"]',
+                log_func,
+            )
+
+            # If not found in a dialog, try the main page
+            if not share_btn:
+                log_func("Share button not found in visible dialogs, trying main page")
+                share_btn = await self._find_element(page, share_selector, log_func)
 
             if share_btn:
                 log_func(f"Found share button for account {account_id}")
+
+                # Check if button is visible and enabled
+                is_visible = await self._is_element_visible(share_btn)
+                is_enabled = await share_btn.is_enabled()
+
+                if not is_visible or not is_enabled:
+                    log_func(
+                        f"Share button found but not interactive: visible={is_visible}, enabled={is_enabled}"
+                    )
+                    return False
 
                 # Click the share button to open the dialog
                 await self._click_element(
@@ -80,38 +209,52 @@ class ShareAction(AutomationAction):
                 )
                 log_func(f"Clicked share dialog button for account {account_id}")
 
+                # Wait for dialog to appear and check if it's present
+                await Randomizer.sleep(1.0, 2.5)
+
+                # Log all dialogs after clicking to see what appeared
+                await self._log_visible_dialogs(page, log_func)
+
                 # Define the 'Share now' selector for dialog
                 share_now_selector = (
                     'div[role="button"][aria-label="Share now"], '
                     'div[role="button"][aria-label="Compartir ahora"]'
                 )
 
-                # Wait for dialog to render and appear
-                await Randomizer.sleep(1.0, 2.5)
-                try:
-                    await page.wait_for_selector(share_now_selector, timeout=10000)
-                    log_func("Share dialog fully rendered")
-                except Exception as e:
-                    log_func(f"Share dialog did not render in time: {str(e)}")
-
-                # 2) Find and click the "Share now" button in the dialog
-                log_func(
-                    f"Looking for 'Share now' button with selector: {share_now_selector}"
+                # Try multiple times with increasing wait times to find the Share now button
+                share_now_btn = await self._find_button_in_visible_dialog(
+                    page,
+                    '[role="button"][aria-label="Share now"], [role="button"][aria-label="Compartir ahora"]',
+                    log_func,
                 )
 
-                # Try multiple times with increasing wait times to find the Share now button
-                share_now_btn = None
-                max_attempts = 5
-                for attempt in range(max_attempts):
-                    share_now_btn = await page.query_selector(share_now_selector)
-                    if share_now_btn:
-                        break
+                if not share_now_btn:
                     log_func(
-                        f"'Share now' button not found on attempt {attempt+1}, waiting..."
+                        "Share now button not found in visible dialogs, trying with standard selector"
                     )
-                    await Randomizer.sleep(1.0 * (attempt + 1), 1.5 * (attempt + 1))
+                    # Try using the standard approach as fallback
+                    max_attempts = 5
+                    for attempt in range(max_attempts):
+                        share_now_btn = await page.query_selector(share_now_selector)
+                        if share_now_btn and await self._is_element_visible(
+                            share_now_btn
+                        ):
+                            break
+                        log_func(
+                            f"'Share now' button not found on attempt {attempt+1}, waiting..."
+                        )
+                        await Randomizer.sleep(1.0 * (attempt + 1), 1.5 * (attempt + 1))
+                        # Try logging dialogs again to see any changes
+                        if attempt == 2:  # Log on middle attempt
+                            await self._log_visible_dialogs(page, log_func)
 
-                if share_now_btn:
+                if share_now_btn and await self._is_element_visible(share_now_btn):
+                    # Verify button is interactive
+                    is_enabled = await share_now_btn.is_enabled()
+                    if not is_enabled:
+                        log_func("Share now button found but not enabled")
+                        return False
+
                     # Click the "Share now" button
                     await self._click_element(
                         page, share_now_btn, "Share now button", log_func
@@ -134,24 +277,93 @@ class ShareAction(AutomationAction):
                     return True
                 else:
                     log_func(
-                        f"'Share now' button not found after {max_attempts} attempts for account {account_id}"
+                        f"'Share now' button not found or not visible for account {account_id}"
                     )
                     return False
             else:
                 log_func(f"Share dialog button not found for account {account_id}")
                 return False
         except Exception as e:
-            log_func(f"Error during Share action: {str(e)}")
+            log_func(f"Error during legacy share method: {str(e)}")
             return False
-        finally:
-            await browser_utils.cleanup_browser(created_browser, browser, playwright)
+
+    async def _log_visible_dialogs(
+        self, page: Any, log_func: Callable[[str], None]
+    ) -> None:
+        """Log information about visible dialogs on the page."""
+        try:
+            dialog_info = await page.evaluate("""
+                () => {
+                    const dialogs = Array.from(document.querySelectorAll('div[role="dialog"]'));
+                    return dialogs.map((dlg, i) => ({
+                        index: i,
+                        visible: dlg.offsetParent !== null,
+                        ariaLabelledBy: dlg.getAttribute('aria-labelledby'),
+                        ariaLabel: dlg.getAttribute('aria-label'),
+                        buttons: Array.from(dlg.querySelectorAll('[role="button"][aria-label]'))
+                            .filter(btn => btn.offsetParent !== null)
+                            .map(btn => btn.getAttribute('aria-label'))
+                    }));
+                }
+            """)
+            log_func(f"Found {len(dialog_info)} dialogs on page")
+            for dlg in dialog_info:
+                log_func(
+                    f"Dialog #{dlg['index']}: visible={dlg['visible']}, labelledBy={dlg['ariaLabelledBy']}, "
+                    + f"label={dlg['ariaLabel']}, visible buttons: {dlg['buttons']}"
+                )
+        except Exception as e:
+            log_func(f"Error logging dialogs: {str(e)}")
+
+    async def _find_button_in_visible_dialog(
+        self, page: Any, button_selector: str, log_func: Callable[[str], None]
+    ) -> Optional[Any]:
+        """Find a button within a visible dialog."""
+        try:
+            return await page.evaluate_handle(f"""
+                () => {{
+                    const dialogs = Array.from(document.querySelectorAll('div[role="dialog"][aria-labelledby]'));
+                    for (const dlg of dialogs) {{
+                        if (dlg.offsetParent === null) continue;  // ignore hidden dialogs
+                        const btn = dlg.querySelector('{button_selector}');
+                        if (btn) return btn;
+                    }}
+                    return null;
+                }}
+            """)
+        except Exception as e:
+            log_func(f"Error finding button in dialog: {str(e)}")
+            return None
+
+    async def _is_element_visible(self, element: Any) -> bool:
+        """Check if an element is visible on the page."""
+        try:
+            is_visible = await element.is_visible()
+            if not is_visible:
+                return False
+
+            # Additional check for actual visibility in DOM
+            is_js_visible = await element.evaluate("""
+                el => {
+                    const rect = el.getBoundingClientRect();
+                    const style = window.getComputedStyle(el);
+                    return rect.width > 0 && 
+                           rect.height > 0 && 
+                           style.display !== 'none' && 
+                           style.visibility !== 'hidden' &&
+                           el.offsetParent !== null;
+                }
+            """)
+            return is_js_visible
+        except:
+            return False
 
     def _extract_url(self, text: str) -> Optional[str]:
         """Extract a URL from text if present."""
-        # Simple URL pattern matching
-        url_pattern = r"https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+"
+        # Extract full URL including path until whitespace or closing quote
+        url_pattern = r"https?://[^\s\"']+"
         match = re.search(url_pattern, text)
-        if match:
+        if match is not None:
             return match.group(0)
         return None
 
@@ -175,7 +387,7 @@ class ShareAction(AutomationAction):
         if "aria-label" in selector:
             # Extract the aria-label value
             aria_label = re.search(r'aria-label="([^"]+)"', selector)
-            if aria_label:
+            if aria_label is not None:
                 label_text = aria_label.group(1)
                 log_func(
                     f"Trying to find element with aria-label containing: {label_text}"
@@ -198,6 +410,10 @@ class ShareAction(AutomationAction):
         log_func: Callable[[str], None],
     ) -> bool:
         """Try multiple methods to click an element."""
+        if element is None:
+            log_func(f"Cannot click null {element_name}")
+            return False
+
         methods = [
             # Method 1: Standard Playwright click
             lambda: element.click(),
