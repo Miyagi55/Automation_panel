@@ -29,7 +29,7 @@ class ShareAction(AutomationAction):
 
         # Extract URL from the link field if it contains a URL within text
         extracted_url = self._extract_url(url)
-        if extracted_url:
+        if extracted_url is not None:
             url = extracted_url
             log_func(f"Extracted URL from input: {url}")
 
@@ -62,7 +62,10 @@ class ShareAction(AutomationAction):
             await Randomizer.sleep(3.0, 5.0)
 
             # 1) Find and click the share button to open dialog
-            share_selector = 'div[role="button"][aria-label="Send this to friends or post it on your profile."]'
+            share_selector = (
+                'div[role="button"][aria-label="Send this to friends or post it on your profile."], '
+                'div[role="button"][aria-label="Envía esto a tus amigos o publícalo en tu perfil."]'
+            )
             log_func(f"Looking for share button with selector: {share_selector}")
 
             # Try multiple methods to find the share button
@@ -78,7 +81,10 @@ class ShareAction(AutomationAction):
                 log_func(f"Clicked share dialog button for account {account_id}")
 
                 # Define the 'Share now' selector for dialog
-                share_now_selector = 'div[role="button"][aria-label="Share now"]'
+                share_now_selector = (
+                    'div[role="button"][aria-label="Share now"], '
+                    'div[role="button"][aria-label="Compartir ahora"]'
+                )
 
                 # Wait for dialog to render and appear
                 await Randomizer.sleep(1.0, 2.5)
