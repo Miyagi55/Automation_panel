@@ -55,5 +55,5 @@ jobs:
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AutomationPanel-windows
+          name: AutomationPanel-windows-${{ github.ref_name }}
           path: dist/AutomationPanel-windows/**
