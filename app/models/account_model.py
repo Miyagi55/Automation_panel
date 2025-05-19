@@ -2,8 +2,9 @@
 import json
 import os
 from pathlib import Path
+import shutil
 from typing import Any, Dict, Optional
-from app.utils.config import ACCOUNTS_FILE
+from app.utils.config import ACCOUNTS_FILE, DATA_DIR
 
 
 class AccountModel:
@@ -95,12 +96,18 @@ class AccountModel:
         return True
 
     def delete_account(self, account_id: str) -> bool:
-        
         if account_id not in self.accounts:
             return False
+        
+        # Delete the account from the accounts dictionary
         del self.accounts[account_id]
         self.save_accounts()
-        return True
+        
+        # Delete the session folder for the account
+        session_folder = os.path.join(DATA_DIR, 'sessions', f"session_{account_id}")
+        if os.path.exists(session_folder):
+            shutil.rmtree(session_folder)
+            return True, session_folder
 
     def get_account(self, account_id: str) -> Optional[Dict[str, Any]]:
         

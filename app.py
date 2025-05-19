@@ -1,5 +1,5 @@
 """
-Facebook Automation Panel - Main Application
+Facebook Automation Panel - Main Application 'test commit from vm'
 
 This application provides a graphical interface for Facebook automation tasks.
 It uses an MVC architecture to separate concerns and promote maintainability.
