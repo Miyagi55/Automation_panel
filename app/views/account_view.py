@@ -20,9 +20,30 @@ class AccountView(BaseView):
 
     def __init__(self, parent, controllers: Dict[str, Any]):
         super().__init__(parent, controllers)
+        self.sync_alert = None
 
     def setup_ui(self):
         self.create_header("Account Management")
+
+        # Alert banner for sync issues (initially hidden)
+        self.alert_frame = ctk.CTkFrame(self, fg_color="#FFA500")
+        self.alert_label = ctk.CTkLabel(
+            self.alert_frame,
+            text="",
+            text_color="#FFFFFF",
+            font=("Segoe UI", 12, "bold"),
+        )
+        self.alert_label.pack(side="left", padx=10, pady=5, fill="x", expand=True)
+
+        self.sync_btn = ctk.CTkButton(
+            self.alert_frame,
+            text="Sync Now",
+            command=self._show_sync_dialog,
+            fg_color="#FFFFFF",
+            text_color="#FFA500",
+            hover_color="#EEEEEE",
+        )
+        self.sync_btn.pack(side="right", padx=10, pady=5)
 
         # Account entry form
         self._setup_entry_form()
@@ -48,7 +69,7 @@ class AccountView(BaseView):
         add_btn.pack(side="left")
 
         import_btn = self.create_button("Import from .txt", self._import_accounts)
-        import_btn.pack(padx=(0, self.padding // 2), fill='x')
+        import_btn.pack(padx=(0, self.padding // 2), fill="x")
 
     def _import_accounts(self):
         file_path = filedialog.askopenfilename(filetypes=[("Text files", "*.txt")])
@@ -85,7 +106,7 @@ class AccountView(BaseView):
             "Password": {"text": "Password", "width": 100},
             "Activity": {"text": "Activity", "width": 100},
             "Status": {"text": "Status", "width": 80},
-            "Last activity": {"text": "Last Activity", "width": 120}
+            "Last activity": {"text": "Last Activity", "width": 120},
         }
 
         # Set headings and column widths
@@ -112,11 +133,15 @@ class AccountView(BaseView):
         )
         delete_btn.pack(side="left", padx=(0, self.padding // 2))
 
-        run_browser_btn = ctk.CTkButton(button_frame, text="Run browser(s)", command=self._run_browser)
+        run_browser_btn = ctk.CTkButton(
+            button_frame, text="Run browser(s)", command=self._run_browser
+        )
         run_browser_btn.pack(side="left")
 
-        auto_login_btn = ctk.CTkButton(button_frame, text="Auto login", command=self.auto_login_accounts)
-        auto_login_btn.pack(side='right')
+        auto_login_btn = ctk.CTkButton(
+            button_frame, text="Auto login", command=self.auto_login_accounts
+        )
+        auto_login_btn.pack(side="right")
 
     def refresh(self):
         """Refresh the accounts table."""
@@ -146,11 +171,68 @@ class AccountView(BaseView):
             except Exception as e:
                 logger.error(f"Error adding account {account_id} to view: {str(e)}")
 
+        # Check for session sync issues
+        self._check_session_sync()
+
+    def _check_session_sync(self):
+        """Check for session sync issues and show alert if needed."""
+        try:
+            orphan_sessions, orphan_accounts = self.controllers[
+                "settings"
+            ].analyze_session_sync_status()
+
+            if not orphan_sessions and not orphan_accounts:
+                # No sync issues, hide alert if it exists
+                if self.alert_frame.winfo_ismapped():
+                    self.alert_frame.pack_forget()
+                return
+
+            # We have sync issues, show the alert
+            messages = []
+            if orphan_sessions:
+                messages.append(
+                    f"Found {len(orphan_sessions)} session folder(s) not in accounts.json"
+                )
+            if orphan_accounts:
+                messages.append(
+                    f"Found {len(orphan_accounts)} account(s) in accounts.json with no session folder"
+                )
+
+            self.alert_label.configure(text=" | ".join(messages))
+
+            if not self.alert_frame.winfo_ismapped():
+                self.alert_frame.pack(
+                    before=self.accounts_tree,
+                    pady=(0, self.padding),
+                    padx=self.padding,
+                    fill="x",
+                )
+
+        except Exception as e:
+            logger.error(f"Error checking session sync status: {str(e)}")
+
+    def _show_sync_dialog(self):
+        """Show session sync confirmation dialog."""
+        if messagebox.askyesno(
+            "Session Sync",
+            "Would you like to open the Settings screen to perform session synchronization?",
+        ):
+            # Navigate to settings view
+            if "parent" in self.controllers:
+                self.controllers["parent"].show_section("settings")
+            else:
+                messagebox.showinfo(
+                    "Navigation",
+                    "Please go to the Settings tab and use the Session Management section to sync sessions.",
+                )
+
     def _add_account(self):
         user = self.user_entry.get()
         password = self.pw_entry.get()
 
-        account_id, error_message = self.controllers["account"].add_account(user, password)
+        account_id, error_message = self.controllers["account"].add_account(
+            user, password
+        )
 
         if account_id:
             self.user_entry.delete(0, tk.END)

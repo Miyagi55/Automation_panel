@@ -5,15 +5,17 @@ This application provides a graphical interface for Facebook automation tasks.
 It uses an MVC architecture to separate concerns and promote maintainability.
 """
 
+import argparse
+from typing import Any, Dict
+
 import customtkinter as ctk
 
-#Load all local packages
+# Load all local packages
 from app.controllers import *
-from app.views import *
 from app.utils.logger import logger
+from app.utils.session_sync import SessionSyncService
+from app.views import *
 
-from typing import Any, Dict
-import argparse
 
 class FacebookAutomationApp:
     """
@@ -74,6 +76,7 @@ class FacebookAutomationApp:
             "monitoring": self.monitoring_controller,
             "browser": self.browser_controller,
             "settings": self.settings_controller,  # Add the settings controller
+            "parent": self,  # Add parent reference for navigation
         }
 
         # Don't start monitoring here - moved to init after setup_views()
@@ -132,7 +135,6 @@ class FacebookAutomationApp:
         # Show and refresh the selected view
         if section_name in self.views:
             self.views[section_name].show()
-            
 
     def toggle_theme(self):
         """Toggle between light and dark themes."""
@@ -181,6 +183,16 @@ def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Facebook Automation Panel")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
+    parser.add_argument(
+        "--resync-sessions",
+        action="store_true",
+        help="Resync session folders with accounts.json",
+    )
+    parser.add_argument(
+        "--prune",
+        action="store_true",
+        help="Remove account entries with no session folder when resyncing",
+    )
     return parser.parse_args()
 
 
@@ -191,6 +203,23 @@ if __name__ == "__main__":
     # Set up logging
     if args.debug:
         logger.debug("Debug mode enabled")
+
+    # Check if resync-sessions is requested
+    if args.resync_sessions:
+        session_sync = SessionSyncService()
+        result = session_sync.sync_sessions(prune=args.prune)
+        logger.info(
+            f"Session sync completed: {result.added_count} sessions added, {result.pruned_count} pruned"
+        )
+        print("Session sync completed:")
+        print(f"  - {result.added_count} new sessions imported")
+        print(f"  - {result.pruned_count} orphaned entries pruned")
+        print(f"  - {result.synced_count} sessions already in sync")
+        if result.orphan_accounts and not args.prune:
+            print(
+                f"  - {len(result.orphan_accounts)} orphaned account entries found. Run with --prune to remove them."
+            )
+        exit(0)
 
     # Start the application
     app = FacebookAutomationApp()

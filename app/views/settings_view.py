@@ -49,6 +49,48 @@ class SettingsView(BaseView):
         )
         self.download_btn.pack(side="left", padx=(0, self.padding // 2))
 
+        # Session Management section
+        session_frame = ctk.CTkFrame(self)
+        session_frame.pack(pady=self.padding, padx=self.padding, fill="x")
+
+        ctk.CTkLabel(
+            session_frame, text="Session Management", font=("Segoe UI", 14, "bold")
+        ).pack(anchor="w", pady=(0, self.padding))
+
+        # Session sync status
+        self.session_status_label = ctk.CTkLabel(
+            session_frame,
+            text="Click 'Analyze Sessions' to check for orphaned sessions or accounts",
+        )
+        self.session_status_label.pack(anchor="w", pady=(0, self.padding // 2))
+
+        # Session sync actions
+        session_button_frame = ctk.CTkFrame(session_frame)
+        session_button_frame.pack(fill="x", pady=(0, self.padding))
+
+        self.analyze_btn = ctk.CTkButton(
+            session_button_frame,
+            text="Analyze Sessions",
+            command=self._analyze_sessions,
+        )
+        self.analyze_btn.pack(side="left", padx=(0, self.padding // 2))
+
+        self.sync_btn = ctk.CTkButton(
+            session_button_frame,
+            text="Resync Sessions",
+            command=self._sync_sessions,
+            state="disabled",
+        )
+        self.sync_btn.pack(side="left", padx=(0, self.padding // 2))
+
+        self.prune_var = ctk.BooleanVar(value=False)
+        self.prune_checkbox = ctk.CTkCheckBox(
+            session_button_frame,
+            text="Prune orphaned accounts",
+            variable=self.prune_var,
+        )
+        self.prune_checkbox.pack(side="left", padx=(0, self.padding // 2))
+
         # Application settings section
         settings_frame = ctk.CTkFrame(self)
         settings_frame.pack(pady=self.padding, padx=self.padding, fill="x")
@@ -198,3 +240,70 @@ class SettingsView(BaseView):
         # For now, just show a message
         messagebox.showinfo("Settings", "Settings saved successfully.")
         logger.info("Application settings updated.")
+
+    def _analyze_sessions(self):
+        """Analyze session folder and accounts.json for mismatches."""
+        try:
+            orphan_sessions, orphan_accounts = self.controllers[
+                "settings"
+            ].analyze_session_sync_status()
+
+            if not orphan_sessions and not orphan_accounts:
+                self.session_status_label.configure(
+                    text="All session folders are properly synced with accounts.json",
+                    text_color="green",
+                )
+                self.sync_btn.configure(state="disabled")
+                return
+
+            status = []
+            if orphan_sessions:
+                status.append(
+                    f"Found {len(orphan_sessions)} session folder(s) not in accounts.json"
+                )
+            if orphan_accounts:
+                status.append(
+                    f"Found {len(orphan_accounts)} account(s) in accounts.json with no session folder"
+                )
+
+            self.session_status_label.configure(
+                text=" | ".join(status), text_color="orange"
+            )
+            self.sync_btn.configure(state="normal")
+
+        except Exception as e:
+            self.session_status_label.configure(
+                text=f"Error analyzing sessions: {str(e)}", text_color="red"
+            )
+            logger.error(f"Error analyzing sessions: {str(e)}")
+
+    def _sync_sessions(self):
+        """Synchronize session folders with accounts.json."""
+        try:
+            if messagebox.askyesno(
+                "Confirm Sync",
+                "This will create account entries for orphaned session folders"
+                + (
+                    " and remove entries for missing session folders"
+                    if self.prune_var.get()
+                    else ""
+                )
+                + ".\n\nProceed?",
+            ):
+                result = self.controllers["settings"].sync_sessions(
+                    prune=self.prune_var.get()
+                )
+
+                message = (
+                    f"Session sync completed:\n"
+                    f"• {result.added_count} new session(s) imported\n"
+                    f"• {result.pruned_count} orphaned account(s) pruned\n"
+                    f"• {result.synced_count} session(s) already in sync"
+                )
+
+                messagebox.showinfo("Sync Complete", message)
+                self._analyze_sessions()  # Refresh status
+
+        except Exception as e:
+            messagebox.showerror("Sync Error", f"Error during session sync: {str(e)}")
+            logger.error(f"Error during session sync: {str(e)}")

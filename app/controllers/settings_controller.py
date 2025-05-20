@@ -3,9 +3,10 @@ Settings controller to manage application settings.
 """
 
 import os
-from typing import Any, Dict
+from typing import Any, Dict, List, Tuple
 
 from app.utils.logger import logger
+from app.utils.session_sync import SessionInfo, SessionSyncService, SyncResult
 
 
 class SettingsController:
@@ -78,3 +79,30 @@ class SettingsController:
         """Reset all settings to defaults."""
         self.settings = self._load_default_settings()
         logger.info("Settings reset to defaults")
+
+    def analyze_session_sync_status(self) -> Tuple[List[SessionInfo], List[str]]:
+        """
+        Analyze the current sync status between session folders and accounts.json.
+
+        Returns:
+            Tuple of (orphan_sessions, orphan_accounts)
+        """
+        session_sync = SessionSyncService()
+        return session_sync.analyze_sync_status()
+
+    def sync_sessions(self, prune: bool = False) -> SyncResult:
+        """
+        Synchronize session folders with accounts.json.
+
+        Args:
+            prune: Whether to remove orphan account entries
+
+        Returns:
+            SyncResult with details of the sync operation
+        """
+        session_sync = SessionSyncService()
+        result = session_sync.sync_sessions(prune=prune)
+        logger.info(
+            f"Session sync completed: {result.added_count} added, {result.pruned_count} pruned"
+        )
+        return result
