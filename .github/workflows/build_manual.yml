@@ -1,4 +1,5 @@
 #NOTE : successfully tested on in 506d4dfd7d379eb6fcf22c62a6485ba6b4ff2495 - 05/03/2025
+# .github/workflows/windows-build.yml
 
 name: Windows Build with PyInstaller & UV
 
@@ -15,9 +16,6 @@ on:
       - 'AutomationPanel-windows.spec'
       - 'README.md'
   workflow_dispatch:
-    branches:
-      - master
-      - dev-main
 
 jobs:
   build:
@@ -53,42 +51,39 @@ jobs:
         run: |
           .\.venv\Scripts\pyinstaller AutomationPanel-windows.spec
 
+      # Zip the build output so we can attach it to the release
+      - name: Zip build output
+        run: |
+          Compress-Archive -Path dist/AutomationPanel-windows/** -DestinationPath AutomationPanel-windows-${{ github.ref_name }}.zip
+
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: AutomationPanel-windows-${{ github.ref_name }}
-          path: dist/AutomationPanel-windows/**
+          path: AutomationPanel-windows-${{ github.ref_name }}.zip
 
-      - name: Zip artifacts
-        if: always()
-        run: powershell -Command "Compress-Archive -Path 'dist/AutomationPanel-windows/*' -DestinationPath 'dist/AutomationPanel-windows.zip'"
-
+      # Create a GitHub Release automatically, tagging it with branch and run number
       - name: Create GitHub Release
-        if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev-main' }}
         id: create_release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref_name }}-${{ github.run_number }}
-          release_name: AutomationPanel-windows-${{ github.ref_name }}-${{ github.run_number }}
+          tag_name: ${{ github.ref_name }}-build-${{ github.run_number }}
+          release_name: AutomationPanel Windows build on ${{ github.ref_name }}
           body: |
-            **Branch**: ${{ github.ref_name }}
-            **Commit**: ${{ github.sha }}
-            **Workflow**: ${{ github.workflow }}
-            **Run number**: ${{ github.run_number }}
-            **Run ID**: ${{ github.run_id }}
-          draft: false
-          prerelease: false
+            **Branch:** ${{ github.ref_name }}
+            **Commit SHA:** ${{ github.sha }}
+            **Run Number:** ${{ github.run_number }}
+            **Workflow:** ${{ github.workflow }}
 
+      # Upload the zipped executable to the newly created release
       - name: Upload Release Asset
-        if: steps.create_release.outputs.upload_url != ''
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: dist/AutomationPanel-windows.zip
-          asset_name: AutomationPanel-windows-${{ github.ref_name }}-${{ github.run_number }}.zip
+          asset_path: AutomationPanel-windows-${{ github.ref_name }}.zip
+          asset_name: AutomationPanel-windows-${{ github.ref_name }}.zip
           asset_content_type: application/zip
-
