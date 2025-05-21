@@ -2,12 +2,16 @@
 Settings view for application settings and webdriver installation.
 """
 
+import json
+import os
 import tkinter as tk
+from pathlib import Path
 from tkinter import messagebox
 from typing import Any, Dict
 
 import customtkinter as ctk
 
+from app.utils.config import APP_CONFIG_PATH, DATA_DIR
 from app.utils.logger import logger
 
 from .base_view import BaseView
@@ -84,24 +88,30 @@ class SettingsView(BaseView):
         self.concurrency_entry.pack(side="left", padx=self.padding)
         self.concurrency_entry.insert(0, "5")
 
-        # Default directory for file dialogs
-        dir_frame = ctk.CTkFrame(settings_frame)
-        dir_frame.pack(fill="x", pady=(0, self.padding // 2))
+        # Data directory settings
+        data_dir_frame = ctk.CTkFrame(settings_frame)
+        data_dir_frame.pack(fill="x", pady=(0, self.padding // 2))
 
-        ctk.CTkLabel(dir_frame, text="Default Directory:").pack(side="left")
-        self.dir_entry = ctk.CTkEntry(dir_frame, width=200)
-        self.dir_entry.pack(side="left", padx=self.padding)
+        ctk.CTkLabel(data_dir_frame, text="Data Directory:").pack(side="left")
+        self.data_dir_entry = ctk.CTkEntry(data_dir_frame, width=350)
+        self.data_dir_entry.pack(side="left", padx=self.padding)
+        self.data_dir_entry.insert(0, str(DATA_DIR))
 
-        browse_btn = ctk.CTkButton(
-            dir_frame, text="Browse", command=self._browse_directory
+        data_dir_browse_btn = ctk.CTkButton(
+            data_dir_frame, text="Browse", command=self._browse_data_directory
         )
-        browse_btn.pack(side="left")
+        data_dir_browse_btn.pack(side="left")
 
-        # Save settings button
-        save_btn = ctk.CTkButton(
-            settings_frame, text="Save Settings", command=self._save_settings
+        data_dir_save_btn = ctk.CTkButton(
+            data_dir_frame, text="Apply", command=self._save_data_directory
         )
-        save_btn.pack(anchor="e", pady=(self.padding, 0))
+        data_dir_save_btn.pack(side="left", padx=(self.padding // 2, 0))
+
+        # Save settings button (This might be redundant now, consider removing or repurposing)
+        # save_btn = ctk.CTkButton(
+        #     settings_frame, text="Save General Settings", command=self._save_settings
+        # )
+        # save_btn.pack(anchor="e", pady=(self.padding, 0))
 
         # About section
         about_frame = ctk.CTkFrame(self)
@@ -123,6 +133,7 @@ class SettingsView(BaseView):
     def refresh(self):
         """Refresh the view's content."""
         self._check_webdriver_status()
+        self._load_current_data_directory()
 
     def _check_webdriver_status(self):
         """Check and update the webdriver status."""
@@ -140,6 +151,11 @@ class SettingsView(BaseView):
                 text_color="red",
             )
             self.download_btn.configure(text="Install Webdrivers")
+
+    def _load_current_data_directory(self):
+        """Load the current data directory from config.json"""
+        self.data_dir_entry.delete(0, tk.END)
+        self.data_dir_entry.insert(0, str(DATA_DIR))
 
     def _download_webdrivers(self):
         """Download or update webdrivers."""
@@ -162,7 +178,7 @@ class SettingsView(BaseView):
             status_label.configure(text=message)
             progress_bar.set(value)
             if value >= 1.0:
-                progress_win.after(1000, progress_win.destroy)  # Close after 1s
+                progress_win.after(1000, progress_win.destroy())  # Close after 1s
                 self.download_btn.configure(state="normal")
                 self._check_webdriver_status()
 
@@ -171,10 +187,15 @@ class SettingsView(BaseView):
 
     def _update_monitoring_interval(self):
         """Update the monitoring update interval."""
+        # This should ideally be part of a general settings save mechanism
         try:
             interval = float(self.interval_entry.get())
             if interval < 0.1:
                 raise ValueError("Interval must be at least 0.1 seconds.")
+
+            # Example: Persist this setting if SettingsController is adapted for general settings
+            # self.controllers["settings"].update_setting("monitoring_interval", interval)
+            # self.controllers["settings"].save_settings() # If a general save mechanism exists
 
             self.controllers["monitoring"].set_update_interval(interval)
             messagebox.showinfo(
@@ -183,18 +204,80 @@ class SettingsView(BaseView):
         except ValueError as e:
             messagebox.showwarning("Input Error", f"Invalid interval: {str(e)}")
 
-    def _browse_directory(self):
-        """Browse for a default directory."""
+    def _browse_data_directory(self):
+        """Browse for a data directory."""
         from tkinter import filedialog
 
-        directory = filedialog.askdirectory()
+        # Suggest the current DATA_DIR's parent or DATA_DIR itself as initial directory
+        initial_dir = str(DATA_DIR.parent if DATA_DIR else Path.home())
+        directory = filedialog.askdirectory(initialdir=initial_dir)
         if directory:
-            self.dir_entry.delete(0, tk.END)
-            self.dir_entry.insert(0, directory)
+            self.data_dir_entry.delete(0, tk.END)
+            self.data_dir_entry.insert(0, directory)
 
-    def _save_settings(self):
-        """Save all settings."""
-        # This would save settings to a config file or database
-        # For now, just show a message
-        messagebox.showinfo("Settings", "Settings saved successfully.")
-        logger.info("Application settings updated.")
+    def _save_data_directory(self):
+        """Save the data directory to config.json."""
+        new_data_dir_str = self.data_dir_entry.get()
+
+        if not new_data_dir_str:
+            messagebox.showwarning("Input Error", "Data directory cannot be empty.")
+            return
+
+        try:
+            new_data_dir = Path(new_data_dir_str)
+            # Ensure the path is absolute
+            if not new_data_dir.is_absolute():
+                messagebox.showwarning(
+                    "Input Error",
+                    "Please provide an absolute path for the data directory.",
+                )
+                return
+
+            os.makedirs(new_data_dir, exist_ok=True)  # Create if it doesn't exist
+
+            config_path = APP_CONFIG_PATH  # Use the centrally defined config path
+
+            current_config = {}
+            if config_path.exists():
+                with open(config_path, "r") as f:
+                    current_config = json.load(f)
+
+            current_config["data_dir"] = str(new_data_dir)  # Store as string
+
+            with open(config_path, "w") as f:
+                json.dump(current_config, f, indent=4)
+
+            messagebox.showinfo(
+                "Success",
+                "Data directory updated. Please restart the application for changes to take full effect.",
+            )
+            logger.info(f"Data directory updated to: {new_data_dir_str}")
+            # Update DATA_DIR in memory for the current session if possible/needed, or rely on restart
+            # For now, we rely on restart as indicated to the user.
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to update data directory: {str(e)}")
+            logger.error(f"Failed to update data directory: {str(e)}")
+
+    # def _save_settings(self):
+    #     """Save all general settings."""
+    #     # This method would handle saving other settings like monitoring interval, concurrency, etc.
+    #     # to a general settings store (e.g., could also be config.json or a separate file)
+    #     # For now, it's commented out as we primarily focused on data_dir
+    #     try:
+    #         # Example: Save monitoring interval
+    #         interval = float(self.interval_entry.get())
+    #         self.controllers["settings"].update_setting("monitoring_interval", interval)
+
+    #         # Example: Save browser concurrency
+    #         concurrency = int(self.concurrency_entry.get())
+    #         self.controllers["settings"].update_setting("browser_concurrency", concurrency)
+
+    #         # Persist all settings
+    #         self.controllers["settings"].save_settings() # Assuming this saves to the config file
+
+    #         messagebox.showinfo("Settings", "General settings saved successfully.")
+    #         logger.info("Application general settings updated.")
+    #     except ValueError as e:
+    #         messagebox.showwarning("Input Error", f"Invalid setting value: {str(e)}")
+    #     except Exception as e:
+    #         messagebox.showerror("Error", f"Failed to save settings: {str(e)}")
