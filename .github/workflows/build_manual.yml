@@ -1,13 +1,12 @@
 #NOTE : successfully tested on in 506d4dfd7d379eb6fcf22c62a6485ba6b4ff2495 - 05/03/2025
 
-name: Windows Build with PyInstaller & UV
+nname: Windows Build with PyInstaller & UV
 
 on:
   push:
     branches:
       - master
       - dev-main
-
     paths:
       - 'app/**'
       - 'pyproject.toml'
@@ -15,8 +14,10 @@ on:
       - 'start.bat'
       - 'AutomationPanel-windows.spec'
       - 'README.md'
-      
   workflow_dispatch:
+    branches:
+      - master
+      - dev-main
 
 jobs:
   build:
@@ -57,3 +58,37 @@ jobs:
         with:
           name: AutomationPanel-windows-${{ github.ref_name }}
           path: dist/AutomationPanel-windows/**
+
+      - name: Zip artifacts
+        if: always()
+        run: powershell -Command "Compress-Archive -Path 'dist/AutomationPanel-windows/*' -DestinationPath 'dist/AutomationPanel-windows.zip'"
+
+      - name: Create GitHub Release
+        if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev-main' }}
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}-${{ github.run_number }}
+          release_name: AutomationPanel-windows-${{ github.ref_name }}-${{ github.run_number }}
+          body: |
+            **Branch**: ${{ github.ref_name }}
+            **Commit**: ${{ github.sha }}
+            **Workflow**: ${{ github.workflow }}
+            **Run number**: ${{ github.run_number }}
+            **Run ID**: ${{ github.run_id }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Asset
+        if: steps.create_release.outputs.upload_url != ''
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: dist/AutomationPanel-windows.zip
+          asset_name: AutomationPanel-windows-${{ github.ref_name }}-${{ github.run_number }}.zip
+          asset_content_type: application/zip
+
