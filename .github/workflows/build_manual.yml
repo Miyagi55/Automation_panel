@@ -7,17 +7,16 @@ on:
     branches:
       - master
       - dev-main
+
     paths:
-      - 'app/**'
-      - 'pyproject.toml'
-      - 'build.bat'
-      - 'start.bat'
-      - 'AutomationPanel-windows.spec'
-      - 'README.md'
+      - "app/**"
+      - "pyproject.toml"
+      - "build.bat"
+      - "start.bat"
+      - "AutomationPanel-windows.spec"
+      - "README.md"
+
   workflow_dispatch:
-    branches:
-      - master
-      - dev-main
 
 jobs:
   build:
@@ -58,36 +57,3 @@ jobs:
         with:
           name: AutomationPanel-windows-${{ github.ref_name }}
           path: dist/AutomationPanel-windows/**
-
-      - name: Zip artifacts
-        if: always()
-        run: powershell -Command "Compress-Archive -Path 'dist/AutomationPanel-windows/*' -DestinationPath 'dist/AutomationPanel-windows.zip'"
-
-      - name: Create GitHub Release
-        if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev-main' }}
-        id: create_release
-        uses: softprops/action-gh-release@v1
-        with:
-          name: Release - ${{ github.ref_name }}
-          tag_name: ${{ github.ref_name }}-${{ github.run_number }}
-          body: |
-            **Branch**: ${{ github.ref_name }}
-            **Commit**: ${{ github.sha }}
-            **Workflow**: ${{ github.workflow }}
-            **Run number**: ${{ github.run_number }}
-            **Run ID**: ${{ github.run_id }}
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Release Asset
-        if: steps.create_release.outputs.upload_url != ''
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: dist/AutomationPanel-windows.zip
-          asset_name: AutomationPanel-windows-${{ github.ref_name }}-${{ github.run_number }}.zip
-          asset_content_type: application/zip
