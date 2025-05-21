@@ -2,9 +2,9 @@
 Settings controller to manage application settings.
 """
 
-import os
 from typing import Any, Dict
 
+from app.utils.config import DATA_DIR
 from app.utils.logger import logger
 
 
@@ -23,7 +23,7 @@ class SettingsController:
         return {
             "monitoring_interval": 1.0,
             "browser_concurrency": 5,
-            "default_directory": os.path.expanduser("~"),
+            "default_directory": str(DATA_DIR),
             "headless_mode": False,
             "auto_save": True,
         }
