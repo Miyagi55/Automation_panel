@@ -1,6 +1,6 @@
 #NOTE : successfully tested on in 506d4dfd7d379eb6fcf22c62a6485ba6b4ff2495 - 05/03/2025
 
-ame: Windows Build with PyInstaller & UV
+name: Windows Build with PyInstaller & UV
 
 on:
   push:
