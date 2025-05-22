@@ -33,3 +33,8 @@ accounts.json
 logs/
 data/
 *.log
+
+# pyintaller
+build/
+dist/
+_internals/
