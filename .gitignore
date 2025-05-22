@@ -37,4 +37,4 @@ data/
 # pyintaller
 build/
 dist/
-_internals/
+_internal/
