@@ -141,7 +141,7 @@ class CacheView:
         self.backup_var = ctk.BooleanVar(value=True)
         backup_checkbox = ctk.CTkCheckBox(
             self.cache_operations_frame,
-            text="Create backup before clearing cache (recommended)",
+            text="Create backup before clearing cache (optional)",
             variable=self.backup_var,
         )
         backup_checkbox.pack(pady=5, padx=15, anchor="w")
