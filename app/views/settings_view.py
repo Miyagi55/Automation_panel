@@ -22,9 +22,12 @@ class SettingsView(BaseView):
     View for application settings and webdriver installation.
     """
 
-    def __init__(self, parent, controllers: Dict[str, Any]):
+    def __init__(
+        self, parent, controllers: Dict[str, Any], cache_refresh_callback=None
+    ):
         """Initialize the settings view."""
         super().__init__(parent, controllers)
+        self.cache_refresh_callback = cache_refresh_callback
 
     def setup_ui(self):
         """Set up the UI components."""
@@ -106,6 +109,33 @@ class SettingsView(BaseView):
             data_dir_frame, text="Apply", command=self._save_data_directory
         )
         data_dir_save_btn.pack(side="left", padx=(self.padding // 2, 0))
+
+        # Cache management settings
+        cache_frame = ctk.CTkFrame(settings_frame)
+        cache_frame.pack(fill="x", pady=(self.padding // 2, self.padding // 2))
+
+        ctk.CTkLabel(cache_frame, text="Cache Management:").pack(side="left")
+
+        # Cache toggle
+        self.cache_enabled_var = ctk.BooleanVar(
+            value=self.controllers["settings"].get_setting("cache_enabled")
+        )
+        cache_toggle = ctk.CTkSwitch(
+            cache_frame,
+            text="Enable Cache (disable to save context space)",
+            variable=self.cache_enabled_var,
+            command=self._toggle_cache,
+        )
+        cache_toggle.pack(side="left", padx=self.padding)
+
+        # Cache info label
+        cache_info_label = ctk.CTkLabel(
+            cache_frame,
+            text="ℹ️ Disabling cache saves space while keeping sessions persistent",
+            font=("Segoe UI", 10),
+            text_color="gray",
+        )
+        cache_info_label.pack(side="left", padx=(self.padding, 0))
 
         # Save settings button (This might be redundant now, consider removing or repurposing)
         # save_btn = ctk.CTkButton(
@@ -281,3 +311,24 @@ class SettingsView(BaseView):
     #         messagebox.showwarning("Input Error", f"Invalid setting value: {str(e)}")
     #     except Exception as e:
     #         messagebox.showerror("Error", f"Failed to save settings: {str(e)}")
+
+    def _toggle_cache(self):
+        """Toggle the cache enabled setting."""
+        try:
+            cache_enabled = self.cache_enabled_var.get()
+            self.controllers["settings"].update_setting("cache_enabled", cache_enabled)
+
+            # Show feedback to user
+            if cache_enabled:
+                logger.info("Cache enabled - full cache management available")
+            else:
+                logger.info(
+                    "Cache disabled - space saving mode activated, sessions remain persistent"
+                )
+
+            # Refresh cache view if callback is available
+            if self.cache_refresh_callback:
+                self.cache_refresh_callback()
+
+        except Exception as e:
+            logger.error(f"Failed to toggle cache setting: {str(e)}")

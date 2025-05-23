@@ -17,17 +17,25 @@ class CacheView:
     Provides interface for analyzing and clearing cache while preserving sessions.
     """
 
-    def __init__(self, parent_frame, controllers: Dict[str, Any]):
+    def __init__(
+        self, parent_frame, controllers: Dict[str, Any], navigation_callback=None
+    ):
         """
         Initialize the cache view.
 
         Args:
             parent_frame: Parent frame for this view
             controllers: Dictionary of controllers
+            navigation_callback: Optional callback for navigation between sections
         """
         self.parent_frame = parent_frame
         self.controllers = controllers
         self.browser_controller = controllers.get("browser")
+        self.settings_controller = controllers.get("settings")
+        self.navigation_callback = navigation_callback
+
+        # Store reference to parent app for navigation (if available)
+        self.parent_app = getattr(parent_frame, "master", None)
 
         # Create main frame
         self.main_frame = ctk.CTkFrame(parent_frame)
@@ -56,6 +64,43 @@ class CacheView:
             font=("Segoe UI", 20, "bold"),
         )
         title_label.pack(pady=(20, 10), padx=20, anchor="w")
+
+        # Check if cache is enabled
+        cache_enabled = True
+        if self.settings_controller:
+            cache_enabled = self.settings_controller.get_setting("cache_enabled")
+
+        if not cache_enabled:
+            # Show cache disabled message
+            disabled_frame = ctk.CTkFrame(self.main_frame)
+            disabled_frame.pack(pady=20, padx=20, fill="both", expand=True)
+
+            disabled_title = ctk.CTkLabel(
+                disabled_frame,
+                text="🚫 Cache Management Disabled",
+                font=("Segoe UI", 18, "bold"),
+            )
+            disabled_title.pack(pady=(20, 10))
+
+            disabled_desc = ctk.CTkLabel(
+                disabled_frame,
+                text="Cache management is currently disabled to save context space.\n"
+                "Sessions remain persistent and functional.\n\n"
+                "To enable cache management, go to Settings and toggle 'Enable Cache'.",
+                font=("Segoe UI", 12),
+                text_color="gray",
+                justify="center",
+            )
+            disabled_desc.pack(pady=10)
+
+            settings_btn = ctk.CTkButton(
+                disabled_frame,
+                text="Go to Settings",
+                command=lambda: self._navigate_to_settings(),
+            )
+            settings_btn.pack(pady=20)
+
+            return
 
         # Description
         desc_label = ctk.CTkLabel(
@@ -138,7 +183,7 @@ class CacheView:
         ops_title.pack(pady=(15, 10), padx=15, anchor="w")
 
         # Backup option
-        self.backup_var = ctk.BooleanVar(value=True)
+        self.backup_var = ctk.BooleanVar(value=False)
         backup_checkbox = ctk.CTkCheckBox(
             self.cache_operations_frame,
             text="Create backup before clearing cache (optional)",
@@ -452,5 +497,32 @@ class CacheView:
         self.main_frame.pack_forget()
 
     def refresh(self):
-        """Refresh the view data."""
-        self.refresh_cache_stats()
+        """Refresh the view's content."""
+        # Clear the main frame and re-setup UI to handle cache toggle changes
+        for widget in self.main_frame.winfo_children():
+            widget.destroy()
+
+        # Reset UI components
+        self.cache_stats_frame = None
+        self.cache_operations_frame = None
+        self.progress_frame = None
+        self.log_frame = None
+
+        # Re-setup UI
+        self.setup_ui()
+
+        # Only refresh cache stats if cache is enabled
+        if self.settings_controller and self.settings_controller.get_setting(
+            "cache_enabled"
+        ):
+            self.refresh_cache_stats()
+
+    def _navigate_to_settings(self):
+        """Navigate to the settings view."""
+        if self.navigation_callback:
+            self.navigation_callback("settings")
+            logger.info("Navigated to settings")
+        else:
+            logger.info(
+                "Navigation callback not available - please go to Settings manually"
+            )

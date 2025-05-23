@@ -26,6 +26,7 @@ class SettingsController:
             "default_directory": str(DATA_DIR),
             "headless_mode": False,
             "auto_save": True,
+            "cache_enabled": True,  # Cache toggle for space saving
         }
 
     def get_setting(self, key: str) -> Any:

@@ -90,8 +90,16 @@ class FacebookAutomationApp:
             "accounts": AccountView(self.content_frame, self.controllers),
             "automation": AutomationView(self.content_frame, self.controllers),
             "monitoring": MonitoringView(self.content_frame, self.controllers),
-            "settings": SettingsView(self.content_frame, self.controllers),
-            "cache": CacheView(self.content_frame, self.controllers),
+            "settings": SettingsView(
+                self.content_frame,
+                self.controllers,
+                cache_refresh_callback=self.refresh_cache_view,
+            ),
+            "cache": CacheView(
+                self.content_frame,
+                self.controllers,
+                navigation_callback=self.show_section,
+            ),
         }
 
         # Add sidebar buttons
@@ -152,6 +160,11 @@ class FacebookAutomationApp:
         """Refresh the workflow view."""
         if "automation" in self.views:
             self.views["automation"].refresh()
+
+    def refresh_cache_view(self):
+        """Refresh the cache view."""
+        if "cache" in self.views:
+            self.views["cache"].refresh()
 
     def update_resource_display(self, resource_data: Dict[str, Any]):
         """Update the resource display with new data."""
