@@ -12,20 +12,21 @@ from typing import Any, Callable, Dict, List, Optional
 
 from app.models.account_model import AccountModel
 from app.models.playwright.automation_handler import AutomationHandler
+from app.utils.config import DATA_DIR
 from app.utils.logger import logger
 
 
-
-
-
-#------------------------------class-----------------------------------------------------------#
+# ------------------------------class-----------------------------------------------------------#
 class WorkflowModel:
     """
     Model for storing and retrieving workflow data.
     """
 
-    def __init__(self, workflows_file: str = "data/workflows.json"):
-        self.workflows_file = workflows_file
+    def __init__(self, workflows_file: str = None):
+        if workflows_file is None:
+            self.workflows_file = str(DATA_DIR / "workflows.json")
+        else:
+            self.workflows_file = workflows_file
         self.workflows = self.load_workflows()
 
     def load_workflows(self) -> Dict[str, Dict[str, Any]]:
@@ -41,6 +42,8 @@ class WorkflowModel:
     def save_workflows(self) -> bool:
         """Save workflows to a JSON file."""
         try:
+            # Make sure the directory exists
+            os.makedirs(os.path.dirname(self.workflows_file), exist_ok=True)
             with open(self.workflows_file, "w") as f:
                 json.dump(self.workflows, f, indent=4)
             return True
@@ -75,11 +78,7 @@ class WorkflowModel:
         return self.save_workflows()
 
 
-
-
-
-
-#------------------------------class-----------------------------------------------------------#
+# ------------------------------class-----------------------------------------------------------#
 class AutomationController:
     """
     Controller for automation operations.
@@ -99,10 +98,7 @@ class AutomationController:
         self.running = False
         self.stop_requested = False
 
-
-
-
-    #--------------Manage Workflows---------------------------------------#
+    # --------------Manage Workflows---------------------------------------#
     def save_workflow(
         self, name: str, actions: Dict[str, dict], accounts: List[str]
     ) -> bool:
@@ -151,11 +147,7 @@ class AutomationController:
         """Get a single workflow."""
         return self.workflow_model.get_workflow(name)
 
-
-
-
-
-    #---------Automation------------------------------------------------#
+    # ---------Automation------------------------------------------------#
     def start_automation(
         self, selected_workflows: List[str], interval: int, randomize: bool
     ) -> bool:
@@ -179,7 +171,8 @@ class AutomationController:
         self.stop_requested = False
 
         thread = threading.Thread(
-            target=self._run_automation, args=(selected_workflows, interval, randomize, False)
+            target=self._run_automation,
+            args=(selected_workflows, interval, randomize, False),
         )
         thread.daemon = True
         thread.start()
@@ -188,8 +181,6 @@ class AutomationController:
             f"Started automation for {len(selected_workflows)} workflows with interval {interval}s"
         )
         return True
-
-
 
     def stop_automation(self) -> bool:
         """Stop the currently running automation."""
@@ -201,10 +192,12 @@ class AutomationController:
         logger.info("Stopping automation...")
         return True
 
-
-
     def _run_automation(
-        self, selected_workflows: List[str], interval: int, randomize: bool, repeat: bool = False
+        self,
+        selected_workflows: List[str],
+        interval: int,
+        randomize: bool,
+        repeat: bool = False,
     ) -> None:
         """Run the automation loop for selected workflows."""
         try:
@@ -290,9 +283,6 @@ class AutomationController:
             self.running = False
             logger.info("Automation stopped")
 
-
-
-
     def _execute_workflow(
         self, workflow_name: str, workflow_data: Dict[str, Any]
     ) -> None:
@@ -321,7 +311,11 @@ class AutomationController:
                 )
             finally:
                 # Cancel pending tasks and close the loop
-                tasks = [task for task in asyncio.all_tasks(loop) if task is not asyncio.current_task(loop)]
+                tasks = [
+                    task
+                    for task in asyncio.all_tasks(loop)
+                    if task is not asyncio.current_task(loop)
+                ]
                 for task in tasks:
                     task.cancel()
                 loop.run_until_complete(loop.shutdown_asyncgens())
@@ -333,13 +327,14 @@ class AutomationController:
         workflow_thread.start()
         workflow_thread.join()  # Wait for workflow to complete
 
-
-
-
     def cleanup(self):
         """Clean up resources on program termination."""
         loop = asyncio.get_event_loop()
-        tasks = [task for task in asyncio.all_tasks(loop) if task is not asyncio.current_task(loop)]
+        tasks = [
+            task
+            for task in asyncio.all_tasks(loop)
+            if task is not asyncio.current_task(loop)
+        ]
         for task in tasks:
             task.cancel()
         loop.run_until_complete(loop.shutdown_asyncgens())
@@ -351,7 +346,9 @@ class AutomationController:
         asyncio.set_event_loop(loop)
         try:
             loop.run_until_complete(
-                self.automation_handler.session_handler.batch_processor.cleanup(logger.info)
+                self.automation_handler.session_handler.batch_processor.cleanup(
+                    logger.info
+                )
             )
         finally:
             loop.run_until_complete(loop.shutdown_asyncgens())

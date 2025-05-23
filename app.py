@@ -5,15 +5,17 @@ This application provides a graphical interface for Facebook automation tasks.
 It uses an MVC architecture to separate concerns and promote maintainability.
 """
 
+import argparse
+from typing import Any, Dict
+
 import customtkinter as ctk
 
-#Load all local packages
+# Load all local packages
 from app.controllers import *
-from app.views import *
 from app.utils.logger import logger
+from app.views import *
+from app.views.cache_view import CacheView
 
-from typing import Any, Dict
-import argparse
 
 class FacebookAutomationApp:
     """
@@ -52,9 +54,6 @@ class FacebookAutomationApp:
         """Set up the controllers."""
         # Create the controllers
         self.browser_controller = BrowserController()
-        self.account_controller = AccountController(
-            update_ui_callback=self.refresh_account_view
-        )
         self.monitoring_controller = MonitoringController(
             update_callback=self.update_resource_display
         )
@@ -69,12 +68,19 @@ class FacebookAutomationApp:
 
         # Store controllers in a dictionary for easy access
         self.controllers = {
-            "account": self.account_controller,
             "automation": self.automation_controller,
             "monitoring": self.monitoring_controller,
             "browser": self.browser_controller,
             "settings": self.settings_controller,  # Add the settings controller
         }
+
+        # Create account controller with controllers reference
+        self.account_controller = AccountController(
+            update_ui_callback=self.refresh_account_view, controllers=self.controllers
+        )
+
+        # Add account controller to the controllers dict
+        self.controllers["account"] = self.account_controller
 
         # Don't start monitoring here - moved to init after setup_views()
 
@@ -88,7 +94,16 @@ class FacebookAutomationApp:
             "accounts": AccountView(self.content_frame, self.controllers),
             "automation": AutomationView(self.content_frame, self.controllers),
             "monitoring": MonitoringView(self.content_frame, self.controllers),
-            "settings": SettingsView(self.content_frame, self.controllers),
+            "settings": SettingsView(
+                self.content_frame,
+                self.controllers,
+                cache_refresh_callback=self.refresh_cache_view,
+            ),
+            "cache": CacheView(
+                self.content_frame,
+                self.controllers,
+                navigation_callback=self.show_section,
+            ),
         }
 
         # Add sidebar buttons
@@ -108,6 +123,7 @@ class FacebookAutomationApp:
             ("Accounts", lambda: self.show_section("accounts")),
             ("Automation", lambda: self.show_section("automation")),
             ("Monitoring", lambda: self.show_section("monitoring")),
+            ("Cache Management", lambda: self.show_section("cache")),
             ("Settings", lambda: self.show_section("settings")),
         ]
         for btn_text, cmd in buttons:
@@ -132,7 +148,6 @@ class FacebookAutomationApp:
         # Show and refresh the selected view
         if section_name in self.views:
             self.views[section_name].show()
-            
 
     def toggle_theme(self):
         """Toggle between light and dark themes."""
@@ -149,6 +164,11 @@ class FacebookAutomationApp:
         """Refresh the workflow view."""
         if "automation" in self.views:
             self.views["automation"].refresh()
+
+    def refresh_cache_view(self):
+        """Refresh the cache view."""
+        if "cache" in self.views:
+            self.views["cache"].refresh()
 
     def update_resource_display(self, resource_data: Dict[str, Any]):
         """Update the resource display with new data."""

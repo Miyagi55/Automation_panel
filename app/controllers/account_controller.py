@@ -4,8 +4,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 from app.models.account_model import AccountModel
 from app.models.playwright.session_handler import SessionHandler
-from app.utils.logger import logger
 from app.utils.config import ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS
+from app.utils.logger import logger
 
 
 class AccountController:
@@ -14,12 +14,18 @@ class AccountController:
     Handles the business logic between account model and view.
     """
 
-    def __init__(self, update_ui_callback: Optional[Callable] = None):
+    def __init__(
+        self,
+        update_ui_callback: Optional[Callable] = None,
+        controllers: Optional[Dict] = None,
+    ):
         self.account_model = AccountModel()
-        self.session_handler = SessionHandler()
+        self.session_handler = SessionHandler(controllers)
         self.update_ui_callback = update_ui_callback
 
-    def add_account(self, user: str, password: str) -> tuple[Optional[str], Optional[str]]:
+    def add_account(
+        self, user: str, password: str
+    ) -> tuple[Optional[str], Optional[str]]:
         """Add a new account."""
         if not user or not password:
             logger.warning("Username and password required")
@@ -71,9 +77,7 @@ class AccountController:
             logger.info(
                 f"Deleted account: {user} (ID: {account_id}, Total: {len(self.account_model.accounts)})"
             )
-            logger.info(
-                f"Deleted session: {success[1]}"
-            )
+            logger.info(f"Deleted session: {success[1]}")
             if self.update_ui_callback:
                 self.update_ui_callback()
             return True
@@ -117,10 +121,10 @@ class AccountController:
                 for line in f:
                     try:
                         line = line.strip()
-                        if ':' in line:
-                            user, password = line.split(':')
-                        elif ',' in line:
-                            user, password = line.split(',')
+                        if ":" in line:
+                            user, password = line.split(":")
+                        elif "," in line:
+                            user, password = line.split(",")
                         else:
                             logger.warning(f"Invalid line in import file: {line}")
                             continue
@@ -159,7 +163,7 @@ class AccountController:
                 results = await self.session_handler.open_sessions(
                     account_id_list,
                     logger.info,
-                    keep_browser_open_seconds=ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS
+                    keep_browser_open_seconds=ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS,
                 )
 
                 for account_id, (login_success, sim_success) in results.items():
@@ -168,21 +172,25 @@ class AccountController:
                             account_id,
                             "Logged In",
                             "Feed Simulated",
-                            "Successful session and feed simulation"
+                            "Successful session and feed simulation",
                         )
                     elif login_success:
                         self.update_account_status(
                             account_id,
                             "Logged In",
-                            "Simulation Failed" if sim_success is False else "No Simulation",
-                            "Session opened but feed simulation failed" if sim_success is False else "Session opened, no simulation attempted"
+                            "Simulation Failed"
+                            if sim_success is False
+                            else "No Simulation",
+                            "Session opened but feed simulation failed"
+                            if sim_success is False
+                            else "Session opened, no simulation attempted",
                         )
                     else:
                         self.update_account_status(
                             account_id,
                             "Not Logged In",
                             "No Simulation",
-                            "Session opened but not logged in"
+                            "Session opened but not logged in",
                         )
             except Exception as e:
                 logger.error(f"Error running browser sessions: {str(e)}")
@@ -196,7 +204,9 @@ class AccountController:
                 # Clean up any remaining tasks
                 pending = asyncio.all_tasks(loop)
                 if pending:
-                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                    loop.run_until_complete(
+                        asyncio.gather(*pending, return_exceptions=True)
+                    )
                 loop.run_until_complete(loop.shutdown_asyncgens())
                 loop.close()
 
@@ -231,14 +241,14 @@ class AccountController:
                             account_id,
                             "Logged In",
                             "Feed Simulated",
-                            "Successful login and feed simulation"
+                            "Successful login and feed simulation",
                         )
                     else:  # Modified to require both login_success and sim_success for "Logged In" status
                         self.update_account_status(
                             account_id,
                             "Login Failed",
                             "Inactive",
-                            "Failed to login or feed simulation failed"
+                            "Failed to login or feed simulation failed",
                         )
             except Exception as e:
                 logger.error(f"Error running login sessions: {str(e)}")
@@ -252,7 +262,9 @@ class AccountController:
                 # Clean up any remaining tasks
                 pending = asyncio.all_tasks(loop)
                 if pending:
-                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                    loop.run_until_complete(
+                        asyncio.gather(*pending, return_exceptions=True)
+                    )
                 loop.run_until_complete(loop.shutdown_asyncgens())
                 loop.close()
 
@@ -279,14 +291,25 @@ class AccountController:
 
         async def run_feed_simulation():
             for account_id in account_id_list:
-                browser = await self.session_handler.browser_context.create_browser_context(account_id, logger.info)
+                settings_controller = (
+                    self.session_handler.controllers.get("settings")
+                    if self.session_handler.controllers
+                    else None
+                )
+                browser = (
+                    await self.session_handler.browser_context.create_browser_context(
+                        account_id, logger.info, settings_controller
+                    )
+                )
                 if not browser:
-                    logger.info(f"Failed to create browser context for account {account_id}")
+                    logger.info(
+                        f"Failed to create browser context for account {account_id}"
+                    )
                     self.update_account_status(
                         account_id,
                         "Simulation Failed",
                         "Inactive",
-                        "Failed to create browser context"
+                        "Failed to create browser context",
                     )
                     continue
 
@@ -296,27 +319,29 @@ class AccountController:
                         url="https://www.facebook.com",
                         browser=browser,
                         log_func=logger.info,
-                        max_execution_time=60
+                        max_execution_time=60,
                     )
                     if success:
                         self.update_account_status(
                             account_id,
                             "Feed Simulated",
                             "Active",
-                            "Successful feed simulation"
+                            "Successful feed simulation",
                         )
                     else:
                         self.update_account_status(
                             account_id,
                             "Simulation Failed",
                             "Inactive",
-                            "Failed feed simulation or not logged in"
+                            "Failed feed simulation or not logged in",
                         )
                 finally:
                     await browser.close()
-                    if hasattr(browser, '_playwright_instance'):
+                    if hasattr(browser, "_playwright_instance"):
                         await browser._playwright_instance.stop()
-                    logger.info(f"Closed browser for feed simulation for account {account_id}")
+                    logger.info(
+                        f"Closed browser for feed simulation for account {account_id}"
+                    )
 
         def run_async_simulation():
             loop = asyncio.new_event_loop()
@@ -327,7 +352,9 @@ class AccountController:
                 # Clean up any remaining tasks
                 pending = asyncio.all_tasks(loop)
                 if pending:
-                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                    loop.run_until_complete(
+                        asyncio.gather(*pending, return_exceptions=True)
+                    )
                 loop.run_until_complete(loop.shutdown_asyncgens())
                 loop.close()
 
