@@ -3,8 +3,8 @@ Browser cache management module for Playwright browser contexts.
 Provides functionality to clear cache data while preserving session information.
 """
 
+import datetime
 import shutil
-import time
 from pathlib import Path
 from typing import Dict
 
@@ -175,6 +175,15 @@ class BrowserCacheManager:
                     try:
                         item_size = self._get_size(item)
 
+                        # Check if item is locked before attempting deletion
+                        if self._is_item_locked(item):
+                            error_msg = (
+                                f"Cannot clear {item.name}: file is locked or in use"
+                            )
+                            result["errors"].append(error_msg)
+                            logger.warning(error_msg)
+                            continue
+
                         if item.is_dir():
                             shutil.rmtree(item)
                         else:
@@ -199,11 +208,22 @@ class BrowserCacheManager:
                         logger.error(error_msg)
 
             result["cleared_size_mb"] = round(result["cleared_size"] / (1024 * 1024), 2)
-            result["success"] = len(result["cleared_items"]) > 0
+
+            # Improved success criteria: successful if no errors, even if nothing to clear
+            result["success"] = len(result["errors"]) == 0
 
             if result["success"]:
-                logger.info(
-                    f"Cache clearing completed. Cleared {result['cleared_size_mb']} MB from {len(result['cleared_items'])} items"
+                if len(result["cleared_items"]) > 0:
+                    logger.info(
+                        f"Cache clearing completed. Cleared {result['cleared_size_mb']} MB from {len(result['cleared_items'])} items"
+                    )
+                else:
+                    logger.info(
+                        "Cache clearing completed. No cache items found to clear"
+                    )
+            else:
+                logger.warning(
+                    f"Cache clearing completed with {len(result['errors'])} errors"
                 )
 
         except Exception as e:
@@ -318,18 +338,19 @@ class BrowserCacheManager:
         Returns:
             True if the item can be safely cleared
         """
-        # Check against clearable lists
+        # Check against clearable lists (explicit allow-list)
         if (
             item_name in self.CLEARABLE_CACHE_DIRS
             or item_name in self.CLEARABLE_CACHE_FILES
         ):
             return True
 
-        # Check against preserve lists
+        # Check against preserve lists (explicit deny-list) - takes precedence
         if item_name in self.PRESERVE_DIRS or item_name in self.PRESERVE_FILES:
             return False
 
-        # Additional heuristics for cache-like items
+        # More conservative heuristics for cache-like items
+        # Only clear if the name starts or ends with cache indicators
         cache_indicators = [
             "cache",
             "Cache",
@@ -339,12 +360,30 @@ class BrowserCacheManager:
             "TEMP",
             "tmp",
             "TMP",
-            ".tmp",
-            ".cache",
         ]
 
+        # Check for exact matches or safe patterns
         for indicator in cache_indicators:
-            if indicator in item_name:
+            # Only clear if it starts with the indicator or ends with it
+            if (
+                item_name.startswith(indicator)
+                or item_name.endswith(indicator)
+                or item_name.endswith(f".{indicator.lower()}")
+                or item_name.endswith(f"_{indicator.lower()}")
+            ):
+                # Extra safety: don't clear anything with "data", "storage", "login", "session"
+                safety_keywords = [
+                    "data",
+                    "storage",
+                    "login",
+                    "session",
+                    "user",
+                    "profile",
+                ]
+                if any(
+                    keyword.lower() in item_name.lower() for keyword in safety_keywords
+                ):
+                    return False
                 return True
 
         # Default to preserve unknown items to be safe
@@ -361,16 +400,28 @@ class BrowserCacheManager:
             Size in bytes
         """
         if path.is_file():
-            return path.stat().st_size
+            try:
+                return path.stat().st_size
+            except (OSError, PermissionError) as e:
+                logger.warning(f"Cannot access file {path}: {e}")
+                return 0
         elif path.is_dir():
             total = 0
+            inaccessible_items = 0
             try:
                 for item in path.rglob("*"):
                     if item.is_file():
-                        total += item.stat().st_size
-            except (OSError, PermissionError):
-                # Handle permission errors gracefully
-                pass
+                        try:
+                            total += item.stat().st_size
+                        except (OSError, PermissionError):
+                            inaccessible_items += 1
+            except (OSError, PermissionError) as e:
+                logger.warning(f"Cannot fully access directory {path}: {e}")
+
+            if inaccessible_items > 0:
+                logger.info(
+                    f"Could not access {inaccessible_items} items in {path}, size may be underreported"
+                )
             return total
         return 0
 
@@ -388,9 +439,17 @@ class BrowserCacheManager:
         backup_dir = session_path.parent / "backups"
         backup_dir.mkdir(exist_ok=True)
 
-        timestamp = str(int(time.time()))
+        # Use microseconds to prevent timestamp collisions
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         backup_name = f"{session_path.name}_backup_{timestamp}"
         backup_path = backup_dir / backup_name
+
+        # Handle potential conflicts with a counter
+        counter = 1
+        original_backup_path = backup_path
+        while backup_path.exists():
+            backup_path = backup_dir / f"{original_backup_path.name}_{counter}"
+            counter += 1
 
         shutil.copytree(session_dir, backup_path)
         return str(backup_path)
@@ -454,3 +513,32 @@ class BrowserCacheManager:
             logger.error(f"Cache statistics failed: {str(e)}")
 
         return stats
+
+    def _is_item_locked(self, path: Path) -> bool:
+        """
+        Check if a file or directory is locked or in use.
+
+        Args:
+            path: Path to the file or directory
+
+        Returns:
+            True if the item is locked or in use
+        """
+        try:
+            if not path.exists():
+                return False
+
+            if path.is_file():
+                # Try to open the file in write mode to check for locks
+                with open(path, "r+b") as f:
+                    pass
+            elif path.is_dir():
+                # Try to rename the directory temporarily to check for locks
+                temp_name = f"{path.name}_temp_check"
+                temp_path = path.parent / temp_name
+                path.rename(temp_path)
+                temp_path.rename(path)  # Rename back immediately
+
+            return False
+        except (OSError, PermissionError):
+            return True
