@@ -5,15 +5,17 @@ This application provides a graphical interface for Facebook automation tasks.
 It uses an MVC architecture to separate concerns and promote maintainability.
 """
 
+import argparse
+from typing import Any, Dict
+
 import customtkinter as ctk
 
-#Load all local packages
+# Load all local packages
 from app.controllers import *
-from app.views import *
 from app.utils.logger import logger
+from app.views import *
+from app.views.cache_view import CacheView
 
-from typing import Any, Dict
-import argparse
 
 class FacebookAutomationApp:
     """
@@ -89,6 +91,7 @@ class FacebookAutomationApp:
             "automation": AutomationView(self.content_frame, self.controllers),
             "monitoring": MonitoringView(self.content_frame, self.controllers),
             "settings": SettingsView(self.content_frame, self.controllers),
+            "cache": CacheView(self.content_frame, self.controllers),
         }
 
         # Add sidebar buttons
@@ -108,6 +111,7 @@ class FacebookAutomationApp:
             ("Accounts", lambda: self.show_section("accounts")),
             ("Automation", lambda: self.show_section("automation")),
             ("Monitoring", lambda: self.show_section("monitoring")),
+            ("Cache Management", lambda: self.show_section("cache")),
             ("Settings", lambda: self.show_section("settings")),
         ]
         for btn_text, cmd in buttons:
@@ -132,7 +136,6 @@ class FacebookAutomationApp:
         # Show and refresh the selected view
         if section_name in self.views:
             self.views[section_name].show()
-            
 
     def toggle_theme(self):
         """Toggle between light and dark themes."""
