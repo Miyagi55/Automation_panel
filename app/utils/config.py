@@ -44,3 +44,10 @@ COMMENT_ACTION_DELAY_RANGE = (0.5, 5.0)
 # Add automation handler delay ranges
 AUTOMATION_ACTION_DELAY_RANGE = (2.0, 5.0)
 AUTOMATION_ACCOUNT_DELAY_RANGE = (5.0, 10.0)
+
+# TIMEOUTS for Facebook dynamic content (in milliseconds)
+# These timeouts are optimized for PyInstaller environments which have higher latency
+FACEBOOK_FEED_TIMEOUT = 15000  # "What's on your mind" element (was 5000ms)
+FACEBOOK_COMMENT_BUTTON_TIMEOUT = 12000  # Comment buttons (was 5000ms)
+FACEBOOK_COMMENT_FIELD_TIMEOUT = 10000  # Comment fields
+FACEBOOK_LOGIN_ELEMENT_TIMEOUT = 30000  # Login form elements
