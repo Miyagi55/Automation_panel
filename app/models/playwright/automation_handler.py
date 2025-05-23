@@ -7,7 +7,7 @@ from app.utils.config import (
 )
 from app.utils.randomizer import Randomizer
 
-from .actions import CommentAction, LikeAction
+from .actions import CommentAction, LikeAction, ShareAction
 from .session_handler import SessionHandler
 
 
@@ -20,6 +20,7 @@ class AutomationHandler:
         self.actions = {
             "Likes": LikeAction(),
             "Comments": CommentAction(),
+            "Shares": ShareAction(),
         }
         self.session_handler = SessionHandler()
         self.playwright: Optional[Any] = None
