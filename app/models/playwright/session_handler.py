@@ -3,14 +3,16 @@ import random
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from app.utils.config import ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS, SESSION_RETRY_DELAY
+from app.models.batch_processor import BatchProcessor
+from app.models.playwright.browser_manager import BrowserManager
+from app.models.playwright.cookie_manager import CookieManager
+from app.models.playwright.login_handler import LoginHandler
+from app.utils.config import (
+    ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS,
+    FACEBOOK_FEED_TIMEOUT,
+    SESSION_RETRY_DELAY,
+)
 from app.utils.randomizer import Randomizer
-
-from .batch_processor import BatchProcessor
-from .browser_context import BrowserContext
-from .browser_manager import BrowserManager
-from .cookie_manager import CookieManager
-from .login_handler import LoginHandler
 
 
 class SessionHandler:
@@ -220,7 +222,7 @@ class SessionHandler:
                         try:
                             await page.wait_for_selector(
                                 '//div[contains(text(), "What\'s on your mind")]',
-                                timeout=5000,
+                                timeout=FACEBOOK_FEED_TIMEOUT,
                             )
                             log_func(
                                 f"'What's on your mind' text found for account {account_id}, indicating feed presence"
