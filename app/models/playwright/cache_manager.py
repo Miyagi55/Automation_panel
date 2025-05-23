@@ -92,10 +92,16 @@ class BrowserCacheManager:
         }
 
         try:
-            # Analyze all items in Default directory
+            # First, calculate the true total size of the entire session directory
+            session_total_size = self._get_size(session_path)
+
+            # Initialize counters for Default directory analysis
+            default_clearable_size = 0
+            default_preserved_size = 0
+
+            # Analyze items in Default directory
             for item in default_path.iterdir():
                 item_size = self._get_size(item)
-                analysis["total_size"] += item_size
 
                 item_info = {
                     "name": item.name,
@@ -106,12 +112,100 @@ class BrowserCacheManager:
                 }
 
                 if self._is_clearable_item(item.name):
-                    analysis["clearable_size"] += item_size
+                    default_clearable_size += item_size
                     analysis["clearable_items"].append(item_info)
                 else:
-                    analysis["preserved_size"] += item_size
+                    default_preserved_size += item_size
                     analysis["preserved_items"].append(item_info)
 
+            # Calculate sizes for directories outside Default (typically cache-related)
+            external_size = session_total_size - self._get_size(default_path)
+
+            # Most external directories are cache-related and clearable
+            # but we need to be conservative about what we consider clearable
+            external_clearable_size = 0
+            external_preserved_size = 0
+
+            for item in session_path.iterdir():
+                if item.name == "Default":
+                    continue
+
+                item_size = self._get_size(item)
+
+                # External cache directories that are safe to clear
+                external_cache_dirs = [
+                    "ShaderCache",
+                    "GrShaderCache",
+                    "GraphiteDawnCache",
+                    "component_crx_cache",
+                    "TrustTokenKeyCommitments",
+                    "ThirdPartyModuleList64",
+                    "Subresource Filter",
+                    "SSLErrorAssistant",
+                    "segmentation_platform",
+                    "SafetyTips",
+                    "PrivacySandboxAttestationsPreloaded",
+                    "PKIMetadata",
+                    "OriginTrials",
+                    "optimization_guide_model_store",
+                    "MediaFoundationWidevineCdm",
+                    "Crowd Deny",
+                    "Crashpad",
+                    "CertificateRevocation",
+                    "FirstPartySetsPreloaded",
+                    "screen_ai",
+                    "ProbabilisticRevealTokenRegistry",
+                    "AmountExtractionHeuristicRegexes",
+                    "AutofillStates",
+                    "CookieReadinessList",
+                    "OpenCookieDatabase",
+                    "TpcdMetadata",
+                    "ZxcvbnData",
+                    "hyphen-data",
+                    "MEIPreload",
+                    "FileTypePolicies",
+                    "OnDeviceHeadSuggestModel",
+                    "OptimizationHints",
+                    "WidevineCdm",
+                    "RecoveryImproved",
+                    "Safe Browsing",
+                ]
+
+                if item.name in external_cache_dirs or self._is_clearable_item(
+                    item.name
+                ):
+                    external_clearable_size += item_size
+                    analysis["clearable_items"].append(
+                        {
+                            "name": item.name,
+                            "path": str(item),
+                            "size": item_size,
+                            "size_mb": round(item_size / (1024 * 1024), 2),
+                            "type": "directory" if item.is_dir() else "file",
+                        }
+                    )
+                else:
+                    external_preserved_size += item_size
+                    analysis["preserved_items"].append(
+                        {
+                            "name": item.name,
+                            "path": str(item),
+                            "size": item_size,
+                            "size_mb": round(item_size / (1024 * 1024), 2),
+                            "type": "directory" if item.is_dir() else "file",
+                        }
+                    )
+
+            # Set final calculations
+            analysis["total_size"] = session_total_size
+            analysis["clearable_size"] = (
+                default_clearable_size + external_clearable_size
+            )
+            analysis["preserved_size"] = (
+                default_preserved_size + external_preserved_size
+            )
+
+            # Convert to MB
             analysis["total_size_mb"] = round(analysis["total_size"] / (1024 * 1024), 2)
             analysis["clearable_size_mb"] = round(
                 analysis["clearable_size"] / (1024 * 1024), 2
@@ -391,7 +485,7 @@ class BrowserCacheManager:
 
     def _get_size(self, path: Path) -> int:
         """
-        Get the total size of a file or directory.
+        Get the total size of a file or directory with improved accuracy and error handling.
 
         Args:
             path: Path to measure
@@ -399,29 +493,53 @@ class BrowserCacheManager:
         Returns:
             Size in bytes
         """
+        if not path.exists():
+            return 0
+
         if path.is_file():
             try:
                 return path.stat().st_size
             except (OSError, PermissionError) as e:
-                logger.warning(f"Cannot access file {path}: {e}")
+                logger.debug(f"Cannot access file {path}: {e}")
                 return 0
         elif path.is_dir():
             total = 0
-            inaccessible_items = 0
+            accessible_files = 0
+            inaccessible_files = 0
+
             try:
+                # Use a more efficient approach for directory traversal
                 for item in path.rglob("*"):
                     if item.is_file():
                         try:
-                            total += item.stat().st_size
-                        except (OSError, PermissionError):
-                            inaccessible_items += 1
-            except (OSError, PermissionError) as e:
-                logger.warning(f"Cannot fully access directory {path}: {e}")
+                            size = item.stat().st_size
+                            total += size
+                            accessible_files += 1
+                        except (OSError, PermissionError, FileNotFoundError):
+                            inaccessible_files += 1
 
-            if inaccessible_items > 0:
-                logger.info(
-                    f"Could not access {inaccessible_items} items in {path}, size may be underreported"
-                )
+                # Log detailed information only if there are inaccessible files
+                if inaccessible_files > 0:
+                    logger.debug(
+                        f"Directory {path}: {accessible_files} files accessible "
+                        f"({total / (1024 * 1024):.2f} MB), "
+                        f"{inaccessible_files} files inaccessible"
+                    )
+                else:
+                    logger.debug(
+                        f"Directory {path}: {accessible_files} files "
+                        f"({total / (1024 * 1024):.2f} MB)"
+                    )
+
+            except (OSError, PermissionError) as e:
+                # If we can't access the directory at all, try to get just the directory size
+                try:
+                    logger.debug(f"Cannot fully traverse directory {path}: {e}")
+                    return path.stat().st_size
+                except (OSError, PermissionError):
+                    logger.debug(f"Cannot access directory {path} at all: {e}")
+                    return 0
+
             return total
         return 0
 
@@ -454,15 +572,16 @@ class BrowserCacheManager:
         shutil.copytree(session_dir, backup_path)
         return str(backup_path)
 
-    def get_cache_statistics(self, sessions_base_dir: str) -> Dict[str, any]:
+    def get_comprehensive_storage_stats(self, sessions_base_dir: str) -> Dict[str, any]:
         """
-        Get cache statistics for all sessions.
+        Get comprehensive storage statistics including all session directories and subdirectories.
+        This provides more accurate storage usage than the cache-focused analysis.
 
         Args:
             sessions_base_dir: Path to the sessions base directory
 
         Returns:
-            Dictionary containing cache statistics
+            Dictionary containing comprehensive storage statistics
         """
         sessions_path = Path(sessions_base_dir)
         if not sessions_path.exists():
@@ -470,10 +589,17 @@ class BrowserCacheManager:
 
         stats = {
             "total_sessions": 0,
-            "total_size": 0,
+            "total_storage_size": 0,
             "total_clearable_size": 0,
             "total_preserved_size": 0,
+            "total_other_size": 0,  # Files/dirs not categorized as cache or preserved
             "sessions": [],
+            "storage_breakdown": {
+                "cache_directories": 0,
+                "preserved_directories": 0,
+                "external_cache": 0,
+                "other_data": 0,
+            },
         }
 
         try:
@@ -484,35 +610,119 @@ class BrowserCacheManager:
             ]
 
             for session_dir in session_dirs:
-                analysis = self.analyze_session_cache(str(session_dir))
-                if not analysis.get("error"):
-                    stats["total_sessions"] += 1
-                    stats["total_size"] += analysis.get("total_size", 0)
-                    stats["total_clearable_size"] += analysis.get("clearable_size", 0)
-                    stats["total_preserved_size"] += analysis.get("preserved_size", 0)
+                # Get both cache analysis and comprehensive storage info
+                cache_analysis = self.analyze_session_cache(str(session_dir))
 
-                    stats["sessions"].append(
-                        {
-                            "name": session_dir.name,
-                            "total_size_mb": analysis.get("total_size_mb", 0),
-                            "clearable_size_mb": analysis.get("clearable_size_mb", 0),
-                            "preserved_size_mb": analysis.get("preserved_size_mb", 0),
-                        }
+                if not cache_analysis.get("error"):
+                    stats["total_sessions"] += 1
+
+                    # Use total_size from comprehensive analysis
+                    session_total = cache_analysis.get("total_size", 0)
+                    session_clearable = cache_analysis.get("clearable_size", 0)
+                    session_preserved = cache_analysis.get("preserved_size", 0)
+                    session_other = max(
+                        0, session_total - session_clearable - session_preserved
                     )
 
-            stats["total_size_mb"] = round(stats["total_size"] / (1024 * 1024), 2)
+                    stats["total_storage_size"] += session_total
+                    stats["total_clearable_size"] += session_clearable
+                    stats["total_preserved_size"] += session_preserved
+                    stats["total_other_size"] += session_other
+
+                    # Detailed session info
+                    session_info = {
+                        "name": session_dir.name,
+                        "total_size_mb": round(session_total / (1024 * 1024), 2),
+                        "clearable_size_mb": round(
+                            session_clearable / (1024 * 1024), 2
+                        ),
+                        "preserved_size_mb": round(
+                            session_preserved / (1024 * 1024), 2
+                        ),
+                        "other_size_mb": round(session_other / (1024 * 1024), 2),
+                        "clearable_items_count": len(
+                            cache_analysis.get("clearable_items", [])
+                        ),
+                        "preserved_items_count": len(
+                            cache_analysis.get("preserved_items", [])
+                        ),
+                    }
+                    stats["sessions"].append(session_info)
+
+            # Convert totals to MB
+            stats["total_storage_size_mb"] = round(
+                stats["total_storage_size"] / (1024 * 1024), 2
+            )
             stats["total_clearable_size_mb"] = round(
                 stats["total_clearable_size"] / (1024 * 1024), 2
             )
             stats["total_preserved_size_mb"] = round(
                 stats["total_preserved_size"] / (1024 * 1024), 2
             )
+            stats["total_other_size_mb"] = round(
+                stats["total_other_size"] / (1024 * 1024), 2
+            )
+
+            # Calculate percentages
+            if stats["total_storage_size"] > 0:
+                stats["clearable_percentage"] = round(
+                    (stats["total_clearable_size"] / stats["total_storage_size"]) * 100,
+                    1,
+                )
+                stats["preserved_percentage"] = round(
+                    (stats["total_preserved_size"] / stats["total_storage_size"]) * 100,
+                    1,
+                )
+                stats["other_percentage"] = round(
+                    (stats["total_other_size"] / stats["total_storage_size"]) * 100, 1
+                )
+            else:
+                stats["clearable_percentage"] = 0
+                stats["preserved_percentage"] = 0
+                stats["other_percentage"] = 0
 
         except Exception as e:
-            stats["error"] = f"Failed to get cache statistics: {str(e)}"
-            logger.error(f"Cache statistics failed: {str(e)}")
+            stats["error"] = f"Failed to get comprehensive storage statistics: {str(e)}"
+            logger.error(f"Comprehensive storage analysis failed: {str(e)}")
 
         return stats
+
+    def get_cache_statistics(self, sessions_base_dir: str) -> Dict[str, any]:
+        """
+        Get cache statistics for all sessions.
+        Enhanced to provide comprehensive storage information.
+
+        Args:
+            sessions_base_dir: Path to the sessions base directory
+
+        Returns:
+            Dictionary containing cache statistics
+        """
+        # Use the comprehensive analysis for more accurate results
+        comprehensive_stats = self.get_comprehensive_storage_stats(sessions_base_dir)
+
+        if comprehensive_stats.get("error"):
+            return comprehensive_stats
+
+        # Return in the expected cache statistics format for backward compatibility
+        # but with enhanced accuracy from comprehensive analysis
+        return {
+            "total_sessions": comprehensive_stats["total_sessions"],
+            "total_size": comprehensive_stats["total_storage_size"],
+            "total_clearable_size": comprehensive_stats["total_clearable_size"],
+            "total_preserved_size": comprehensive_stats["total_preserved_size"],
+            "total_other_size": comprehensive_stats["total_other_size"],
+            "total_size_mb": comprehensive_stats["total_storage_size_mb"],
+            "total_clearable_size_mb": comprehensive_stats["total_clearable_size_mb"],
+            "total_preserved_size_mb": comprehensive_stats["total_preserved_size_mb"],
+            "total_other_size_mb": comprehensive_stats["total_other_size_mb"],
+            "sessions": comprehensive_stats["sessions"],
+            "clearable_percentage": comprehensive_stats.get("clearable_percentage", 0),
+            "preserved_percentage": comprehensive_stats.get("preserved_percentage", 0),
+            "other_percentage": comprehensive_stats.get("other_percentage", 0),
+            "storage_breakdown": comprehensive_stats.get("storage_breakdown", {}),
+            "analysis_type": "comprehensive",  # Indicator that this uses enhanced analysis
+        }
 
     def _is_item_locked(self, path: Path) -> bool:
         """

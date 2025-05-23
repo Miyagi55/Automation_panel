@@ -131,7 +131,7 @@ class CacheView:
         # Stats title
         stats_title = ctk.CTkLabel(
             self.cache_stats_frame,
-            text="Cache Statistics",
+            text="Storage Usage Statistics",
             font=("Segoe UI", 16, "bold"),
         )
         stats_title.pack(pady=(15, 10), padx=15, anchor="w")
@@ -147,7 +147,7 @@ class CacheView:
         self.total_sessions_label.pack(pady=5, padx=15, anchor="w")
 
         self.total_size_label = ctk.CTkLabel(
-            self.stats_content_frame, text="Total Size: Loading..."
+            self.stats_content_frame, text="Total Storage Usage: Loading..."
         )
         self.total_size_label.pack(pady=5, padx=15, anchor="w")
 
@@ -157,9 +157,20 @@ class CacheView:
         self.clearable_size_label.pack(pady=5, padx=15, anchor="w")
 
         self.preserved_size_label = ctk.CTkLabel(
-            self.stats_content_frame, text="Preserved Data: Loading..."
+            self.stats_content_frame, text="Preserved Session Data: Loading..."
         )
         self.preserved_size_label.pack(pady=5, padx=15, anchor="w")
+
+        # Add new labels for enhanced information
+        self.other_size_label = ctk.CTkLabel(
+            self.stats_content_frame, text="Other Data: Loading..."
+        )
+        self.other_size_label.pack(pady=5, padx=15, anchor="w")
+
+        self.storage_efficiency_label = ctk.CTkLabel(
+            self.stats_content_frame, text="Storage Analysis: Loading..."
+        )
+        self.storage_efficiency_label.pack(pady=5, padx=15, anchor="w")
 
         # Refresh button
         refresh_btn = ctk.CTkButton(
@@ -298,31 +309,105 @@ class CacheView:
 
         def refresh_thread():
             try:
-                self.update_progress("Loading cache statistics...", 0.3)
+                self.update_progress("Initializing cache analysis...", 0.1)
 
                 if not self.browser_controller:
                     self.log_message("❌ Browser controller not available")
+                    self.update_progress("Error: Browser controller unavailable", 0)
                     return
 
+                self.update_progress("Scanning browser sessions...", 0.3)
+
+                # Get cache statistics
                 stats = self.browser_controller.get_cache_stats()
 
                 if stats.get("error"):
-                    self.log_message(f"❌ Error loading stats: {stats['error']}")
+                    error_msg = f"❌ Error loading stats: {stats['error']}"
+                    self.log_message(error_msg)
+                    self.update_progress("Error loading statistics", 0)
+
+                    # Show error details to help debugging
+                    if "not found" in str(stats["error"]).lower():
+                        self.log_message(
+                            "💡 Tip: Ensure browser sessions directory exists"
+                        )
+                    elif "permission" in str(stats["error"]).lower():
+                        self.log_message(
+                            "💡 Tip: Check file permissions on browser session directories"
+                        )
                     return
 
+                self.update_progress("Processing storage analysis...", 0.7)
+
+                # Validate statistics data
+                if not isinstance(stats, dict):
+                    self.log_message("❌ Invalid statistics data received")
+                    self.update_progress("Error: Invalid data format", 0)
+                    return
+
+                # Store current stats for potential later use
                 self.current_stats = stats
+
+                # Extract key metrics for logging
+                total_sessions = stats.get("total_sessions", 0)
+                total_size_mb = stats.get("total_size_mb", 0)
+                clearable_size_mb = stats.get("total_clearable_size_mb", 0)
+
+                self.update_progress("Updating display...", 0.9)
+
+                # Update the display
                 self.update_stats_display(stats)
-                self.update_progress("Statistics loaded successfully", 1.0)
-                self.log_message("✅ Cache statistics refreshed")
+
+                # Log success with details
+                success_msg = "✅ Cache statistics refreshed successfully"
+                self.log_message(success_msg)
+                self.log_message(
+                    f"   📊 Found {total_sessions} sessions using {total_size_mb:.1f} MB total"
+                )
+
+                if clearable_size_mb > 0:
+                    self.log_message(f"   🗑️  {clearable_size_mb:.1f} MB can be cleared")
+                else:
+                    self.log_message("   ✨ No cache data to clear")
+
+                # Show analysis type
+                analysis_type = stats.get("analysis_type", "unknown")
+                self.log_message(f"   📈 Analysis type: {analysis_type}")
+
+                self.update_progress("Analysis complete ✅", 1.0)
 
             except Exception as e:
                 error_msg = f"Failed to refresh cache statistics: {str(e)}"
                 self.log_message(f"❌ {error_msg}")
                 logger.error(error_msg)
+
+                # Provide helpful debugging information
+                self.log_message("🔧 Debug information:")
+                self.log_message(f"   - Error type: {type(e).__name__}")
+                self.log_message(
+                    f"   - Browser controller available: {self.browser_controller is not None}"
+                )
+
+                # Show generic error state
+                if hasattr(self, "storage_efficiency_label"):
+
+                    def show_error():
+                        self.storage_efficiency_label.configure(
+                            text="⚠️ Error refreshing statistics - check logs"
+                        )
+
+                    self.main_frame.after(0, show_error)
+
+                self.update_progress("Error occurred during refresh", 0)
+
             finally:
                 # Reset progress after a delay
-                self.main_frame.after(2000, lambda: self.update_progress("Ready", 0))
+                self.main_frame.after(3000, lambda: self.update_progress("Ready", 0))
 
+        # Show loading state immediately
+        self.update_progress("Starting refresh...", 0.05)
+
+        # Start refresh in background thread
         thread = threading.Thread(target=refresh_thread, daemon=True)
         thread.start()
 
@@ -330,21 +415,111 @@ class CacheView:
         """Update the statistics display with new data."""
 
         def update_ui():
-            total_sessions = stats.get("total_sessions", 0)
-            total_size_mb = stats.get("total_size_mb", 0)
-            clearable_size_mb = stats.get("total_clearable_size_mb", 0)
-            preserved_size_mb = stats.get("total_preserved_size_mb", 0)
+            try:
+                total_sessions = stats.get("total_sessions", 0)
+                total_size_mb = stats.get("total_size_mb", 0)
+                clearable_size_mb = stats.get("total_clearable_size_mb", 0)
+                preserved_size_mb = stats.get("total_preserved_size_mb", 0)
+                other_size_mb = stats.get("total_other_size_mb", 0)
 
-            self.total_sessions_label.configure(
-                text=f"Total Sessions: {total_sessions}"
-            )
-            self.total_size_label.configure(text=f"Total Size: {total_size_mb:.2f} MB")
-            self.clearable_size_label.configure(
-                text=f"Clearable Cache: {clearable_size_mb:.2f} MB"
-            )
-            self.preserved_size_label.configure(
-                text=f"Preserved Data: {preserved_size_mb:.2f} MB"
-            )
+                # Get percentages for better understanding
+                clearable_pct = stats.get("clearable_percentage", 0)
+                preserved_pct = stats.get("preserved_percentage", 0)
+                other_pct = stats.get("other_percentage", 0)
+
+                # Check if this is using enhanced analysis
+                analysis_type = stats.get("analysis_type", "basic")
+
+                # Update session count with better formatting
+                session_text = f"Total Sessions: {total_sessions}"
+                if total_sessions == 0:
+                    session_text += " (No browser sessions found)"
+                elif total_sessions == 1:
+                    session_text += " (1 active session)"
+                else:
+                    session_text += f" ({total_sessions} active sessions)"
+
+                self.total_sessions_label.configure(text=session_text)
+
+                # Enhanced total storage display
+                total_text = f"Total Storage Usage: {total_size_mb:.2f} MB"
+                if total_size_mb > 1024:
+                    total_gb = total_size_mb / 1024
+                    total_text += f" ({total_gb:.2f} GB)"
+                self.total_size_label.configure(text=total_text)
+
+                # Enhanced clearable cache display
+                clearable_text = f"Clearable Cache: {clearable_size_mb:.2f} MB ({clearable_pct:.1f}%)"
+                if clearable_size_mb == 0:
+                    clearable_text += " (Cache may be disabled or already cleared)"
+                elif clearable_size_mb > 100:
+                    clearable_text += " ⚠️ Consider clearing"
+                self.clearable_size_label.configure(text=clearable_text)
+
+                # Enhanced preserved data display
+                preserved_text = f"Preserved Session Data: {preserved_size_mb:.2f} MB ({preserved_pct:.1f}%)"
+                if preserved_size_mb > 0:
+                    preserved_text += " (Contains login sessions, cookies, etc.)"
+                self.preserved_size_label.configure(text=preserved_text)
+
+                # Update the other data label with better information
+                if hasattr(self, "other_size_label"):
+                    other_text = (
+                        f"Other Data: {other_size_mb:.2f} MB ({other_pct:.1f}%)"
+                    )
+                    if other_size_mb > 0:
+                        other_text += " (Unclassified browser data)"
+                    self.other_size_label.configure(text=other_text)
+
+                # Enhanced storage efficiency information
+                if hasattr(self, "storage_efficiency_label"):
+                    if total_size_mb > 0:
+                        efficiency_text = f"Storage Analysis: {analysis_type.capitalize()} scan complete"
+
+                        # Add actionable insights
+                        if clearable_size_mb > 50:
+                            efficiency_text += (
+                                f" • {clearable_size_mb:.1f} MB can be cleared"
+                            )
+                        elif clearable_size_mb > 0:
+                            efficiency_text += (
+                                f" • {clearable_size_mb:.1f} MB available to clear"
+                            )
+                        else:
+                            efficiency_text += " • No cache to clear"
+
+                        # Add storage efficiency rating
+                        efficiency_ratio = (
+                            clearable_size_mb / total_size_mb
+                            if total_size_mb > 0
+                            else 0
+                        )
+                        if efficiency_ratio > 0.5:
+                            efficiency_text += (
+                                " (High cache usage - recommended to clear)"
+                            )
+                        elif efficiency_ratio > 0.2:
+                            efficiency_text += " (Moderate cache usage)"
+                        else:
+                            efficiency_text += " (Low cache usage - optimal)"
+                    else:
+                        efficiency_text = "Storage Analysis: No browser data found"
+
+                    self.storage_efficiency_label.configure(text=efficiency_text)
+
+                # Log successful update
+                logger.info(
+                    f"Statistics updated: {total_sessions} sessions, {total_size_mb:.2f} MB total"
+                )
+
+            except Exception as e:
+                error_msg = f"Failed to update statistics display: {str(e)}"
+                logger.error(error_msg)
+                # Show error in UI
+                if hasattr(self, "storage_efficiency_label"):
+                    self.storage_efficiency_label.configure(
+                        text="⚠️ Error updating statistics display"
+                    )
 
         self.main_frame.after(0, update_ui)
 
@@ -488,34 +663,43 @@ class CacheView:
         """Clear the log display."""
         self.log_text.delete("1.0", "end")
 
+    def refresh(self):
+        """
+        Refresh the cache view.
+        Called when the view is activated or when external triggers require refresh.
+        """
+        try:
+            # Clear any existing logs when refreshing the view
+            self.log_message("🔄 Refreshing cache management view...")
+
+            # Immediately refresh statistics
+            self.refresh_cache_stats()
+
+            logger.info("Cache view refreshed successfully")
+
+        except Exception as e:
+            error_msg = f"Failed to refresh cache view: {str(e)}"
+            self.log_message(f"❌ {error_msg}")
+            logger.error(error_msg)
+
     def show(self):
-        """Show this view."""
+        """Show this view and refresh data."""
         self.main_frame.pack(fill="both", expand=True)
+        # Auto-refresh when showing the view for better user experience
+        self.main_frame.after(100, self.refresh_cache_stats)
 
     def hide(self):
         """Hide this view."""
         self.main_frame.pack_forget()
 
-    def refresh(self):
-        """Refresh the view's content."""
-        # Clear the main frame and re-setup UI to handle cache toggle changes
-        for widget in self.main_frame.winfo_children():
-            widget.destroy()
+    def get_current_stats(self) -> Dict[str, Any]:
+        """
+        Get the current cached statistics.
 
-        # Reset UI components
-        self.cache_stats_frame = None
-        self.cache_operations_frame = None
-        self.progress_frame = None
-        self.log_frame = None
-
-        # Re-setup UI
-        self.setup_ui()
-
-        # Only refresh cache stats if cache is enabled
-        if self.settings_controller and self.settings_controller.get_setting(
-            "cache_enabled"
-        ):
-            self.refresh_cache_stats()
+        Returns:
+            Dictionary containing current statistics or empty dict if none available
+        """
+        return getattr(self, "current_stats", {})
 
     def _navigate_to_settings(self):
         """Navigate to the settings view."""

@@ -54,9 +54,6 @@ class FacebookAutomationApp:
         """Set up the controllers."""
         # Create the controllers
         self.browser_controller = BrowserController()
-        self.account_controller = AccountController(
-            update_ui_callback=self.refresh_account_view
-        )
         self.monitoring_controller = MonitoringController(
             update_callback=self.update_resource_display
         )
@@ -71,12 +68,19 @@ class FacebookAutomationApp:
 
         # Store controllers in a dictionary for easy access
         self.controllers = {
-            "account": self.account_controller,
             "automation": self.automation_controller,
             "monitoring": self.monitoring_controller,
             "browser": self.browser_controller,
             "settings": self.settings_controller,  # Add the settings controller
         }
+
+        # Create account controller with controllers reference
+        self.account_controller = AccountController(
+            update_ui_callback=self.refresh_account_view, controllers=self.controllers
+        )
+
+        # Add account controller to the controllers dict
+        self.controllers["account"] = self.account_controller
 
         # Don't start monitoring here - moved to init after setup_views()
 

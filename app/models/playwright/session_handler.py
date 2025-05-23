@@ -19,12 +19,13 @@ class SessionHandler:
     Delegates tasks to specialized classes for login, cookies, and batch processing.
     """
 
-    def __init__(self):
+    def __init__(self, controllers=None):
         self.browser_manager = BrowserManager()
         self.browser_context = BrowserContext(self.browser_manager)
         self.login_handler = LoginHandler()
         self.cookie_manager = CookieManager()
         self.batch_processor = BatchProcessor(self)
+        self.controllers = controllers  # Store controllers for settings access
 
     async def login_account(
         self,
@@ -39,8 +40,11 @@ class SessionHandler:
         Returns (login_successful, sim_success, browser, playwright_instance).
         """
         user_data_dir = self.browser_manager.get_session_dir(account_id)
+        settings_controller = (
+            self.controllers.get("settings") if self.controllers else None
+        )
         browser = await self.browser_context.create_browser_context(
-            account_id, log_func
+            account_id, log_func, settings_controller
         )
         playwright_instance = browser._playwright_instance if browser else None
         if not browser:
@@ -168,111 +172,101 @@ class SessionHandler:
                 )
                 return False, False, None, None
 
-            # Create browser context without context manager
-            from patchright.async_api import async_playwright
+            # Create browser context using our enhanced method
+            settings_controller = (
+                self.controllers.get("settings") if self.controllers else None
+            )
+            browser = await self.browser_context.create_browser_context(
+                account_id, log_func, settings_controller
+            )
 
-            p = await async_playwright().start()
+            if not browser:
+                log_func(f"Failed to create browser context for account {account_id}")
+                return False, False, None, None
+
+            # Get the playwright instance from the browser
+            playwright_instance = browser._playwright_instance if browser else None
+
             try:
-                browser = await p.chromium.launch_persistent_context(
-                    no_viewport=True,
-                    channel="chrome",
-                    headless=False,
-                    user_data_dir=user_data_dir,
-                )
-                try:
-                    # Save cookies
-                    await self.cookie_manager.save_cookies(
-                        browser, account_id, log_func
-                    )
+                # Save cookies
+                await self.cookie_manager.save_cookies(browser, account_id, log_func)
 
-                    # Open a new page and navigate to Facebook home URL with retries
-                    page = await browser.new_page()
-                    max_retries = 3
-                    for attempt in range(max_retries):
-                        try:
-                            await page.goto(
-                                home_url, wait_until="domcontentloaded", timeout=60000
-                            )
-                            log_func(
-                                f"Navigated to {home_url} for account {account_id}"
-                            )
-                            break
-                        except Exception as e:
-                            log_func(
-                                f"Navigation failed for account {account_id} (attempt {attempt + 1}): {str(e)}"
-                            )
-                            if attempt < max_retries - 1:
-                                await Randomizer.sleep(*SESSION_RETRY_DELAY)
-                            else:
-                                log_func(
-                                    f"Failed to navigate to {home_url} for account {account_id} after {max_retries} attempts"
-                                )
-                                return False, False, None, None
-
-                    # Verify login state
-                    login_form = await page.query_selector("input#email")
-                    is_logged_in = login_form is None
-                    sim_success = False
-
-                    if is_logged_in:
-                        log_func(f"Account {account_id} is logged in")
-                        # Wait for "What's on your mind" text to confirm logged-in state with feed
-                        try:
-                            await page.wait_for_selector(
-                                '//div[contains(text(), "What\'s on your mind")]',
-                                timeout=5000,
-                            )
-                            log_func(
-                                f"'What's on your mind' text found for account {account_id}, indicating feed presence"
-                            )
-                            if not skip_simulation:
-                                sim_success = await self.simulate_facebook_feed(
-                                    account_id,
-                                    home_url,
-                                    browser,
-                                    log_func,
-                                    max_execution_time=60,
-                                    page=page,
-                                )
-                            else:
-                                sim_success = (
-                                    True  # Assume success if simulation is skipped
-                                )
-                        except Exception as e:
-                            log_func(
-                                f"Failed to find 'What's on your mind' text for account {account_id}: {str(e)}"
-                            )
-                            sim_success = False
-                    else:
+                # Open a new page and navigate to Facebook home URL with retries
+                page = await browser.new_page()
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        await page.goto(
+                            home_url, wait_until="domcontentloaded", timeout=60000
+                        )
+                        log_func(f"Navigated to {home_url} for account {account_id}")
+                        break
+                    except Exception as e:
                         log_func(
-                            f"Account {account_id} is not logged in: Login form detected"
+                            f"Navigation failed for account {account_id} (attempt {attempt + 1}): {str(e)}"
                         )
+                        if attempt < max_retries - 1:
+                            await Randomizer.sleep(*SESSION_RETRY_DELAY)
+                        else:
+                            log_func(
+                                f"Failed to navigate to {home_url} for account {account_id} after {max_retries} attempts"
+                            )
+                            return False, False, None, None
 
-                    # Keep browser open if requested
-                    if keep_browser_open_seconds > 0:
+                # Verify login state
+                login_form = await page.query_selector("input#email")
+                is_logged_in = login_form is None
+                sim_success = False
+
+                if is_logged_in:
+                    log_func(f"Account {account_id} is logged in")
+                    # Wait for "What's on your mind" text to confirm logged-in state with feed
+                    try:
+                        await page.wait_for_selector(
+                            '//div[contains(text(), "What\'s on your mind")]',
+                            timeout=5000,
+                        )
                         log_func(
-                            f"Keeping browser open for {keep_browser_open_seconds} seconds for account {account_id}"
+                            f"'What's on your mind' text found for account {account_id}, indicating feed presence"
                         )
-                        await Randomizer.sleep(
-                            keep_browser_open_seconds, keep_browser_open_seconds
+                        if not skip_simulation:
+                            sim_success = await self.simulate_facebook_feed(
+                                account_id,
+                                home_url,
+                                browser,
+                                log_func,
+                                max_execution_time=60,
+                                page=page,
+                            )
+                        else:
+                            sim_success = (
+                                True  # Assume success if simulation is skipped
+                            )
+                    except Exception as e:
+                        log_func(
+                            f"Failed to find 'What's on your mind' text for account {account_id}: {str(e)}"
                         )
-
-                    return is_logged_in, sim_success, browser, p
-
-                except Exception as e:
+                        sim_success = False
+                else:
                     log_func(
-                        f"Error opening session for account {account_id}: {str(e)}"
+                        f"Account {account_id} is not logged in: Login form detected"
                     )
-                    if browser and not (
-                        hasattr(browser, "_closed") and browser._closed
-                    ):
-                        await browser.close()
-                    return False, False, None, None
+
+                # Keep browser open if requested
+                if keep_browser_open_seconds > 0:
+                    log_func(
+                        f"Keeping browser open for {keep_browser_open_seconds} seconds for account {account_id}"
+                    )
+                    await Randomizer.sleep(
+                        keep_browser_open_seconds, keep_browser_open_seconds
+                    )
+
+                return is_logged_in, sim_success, browser, playwright_instance
+
             except Exception as e:
-                log_func(
-                    f"Error starting Playwright for account {account_id}: {str(e)}"
-                )
-                await p.stop()
+                log_func(f"Error opening session for account {account_id}: {str(e)}")
+                if browser and not (hasattr(browser, "_closed") and browser._closed):
+                    await browser.close()
                 return False, False, None, None
 
         results = await self.batch_processor.process_batch(
