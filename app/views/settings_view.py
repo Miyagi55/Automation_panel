@@ -103,6 +103,83 @@ class SettingsView(BaseView):
         )
         save_btn.pack(anchor="e", pady=(self.padding, 0))
 
+        # Notification settings section
+        notification_frame = ctk.CTkFrame(self)
+        notification_frame.pack(pady=self.padding, padx=self.padding, fill="x")
+
+        ctk.CTkLabel(
+            notification_frame,
+            text="Notification Settings",
+            font=("Segoe UI", 14, "bold"),
+        ).pack(anchor="w", pady=(0, self.padding))
+
+        # Enable notifications toggle
+        self.notifications_switch = ctk.CTkSwitch(
+            notification_frame,
+            text="Enable Notifications",
+            command=self._toggle_notifications,
+        )
+        self.notifications_switch.pack(anchor="w", pady=(0, self.padding // 2))
+
+        # Notification cooldown
+        cooldown_frame = ctk.CTkFrame(notification_frame)
+        cooldown_frame.pack(fill="x", pady=(0, self.padding // 2))
+
+        ctk.CTkLabel(cooldown_frame, text="Notification Cooldown (seconds):").pack(
+            side="left"
+        )
+        self.cooldown_entry = ctk.CTkEntry(cooldown_frame, width=80)
+        self.cooldown_entry.pack(side="left", padx=self.padding)
+
+        # Memory threshold
+        memory_frame = ctk.CTkFrame(notification_frame)
+        memory_frame.pack(fill="x", pady=(0, self.padding // 2))
+
+        ctk.CTkLabel(memory_frame, text="Memory Alert Threshold (%):").pack(side="left")
+        self.memory_threshold_entry = ctk.CTkEntry(memory_frame, width=80)
+        self.memory_threshold_entry.pack(side="left", padx=self.padding)
+
+        # Storage threshold
+        storage_frame = ctk.CTkFrame(notification_frame)
+        storage_frame.pack(fill="x", pady=(0, self.padding // 2))
+
+        ctk.CTkLabel(storage_frame, text="Storage Alert Threshold (%):").pack(
+            side="left"
+        )
+        self.storage_threshold_entry = ctk.CTkEntry(storage_frame, width=80)
+        self.storage_threshold_entry.pack(side="left", padx=self.padding)
+
+        # CPU threshold
+        cpu_frame = ctk.CTkFrame(notification_frame)
+        cpu_frame.pack(fill="x", pady=(0, self.padding // 2))
+
+        ctk.CTkLabel(cpu_frame, text="CPU Alert Threshold (%):").pack(side="left")
+        self.cpu_threshold_entry = ctk.CTkEntry(cpu_frame, width=80)
+        self.cpu_threshold_entry.pack(side="left", padx=self.padding)
+
+        # Notification actions
+        notification_actions_frame = ctk.CTkFrame(notification_frame)
+        notification_actions_frame.pack(fill="x", pady=(self.padding // 2, 0))
+
+        test_btn = ctk.CTkButton(
+            notification_actions_frame,
+            text="Test Notification",
+            command=self._test_notification,
+        )
+        test_btn.pack(side="left", padx=(0, self.padding // 2))
+
+        reset_btn = ctk.CTkButton(
+            notification_actions_frame, text="Reset Alerts", command=self._reset_alerts
+        )
+        reset_btn.pack(side="left")
+
+        save_notification_btn = ctk.CTkButton(
+            notification_actions_frame,
+            text="Save Notification Settings",
+            command=self._save_notification_settings,
+        )
+        save_notification_btn.pack(side="right")
+
         # About section
         about_frame = ctk.CTkFrame(self)
         about_frame.pack(pady=self.padding, padx=self.padding, fill="both", expand=True)
@@ -123,6 +200,7 @@ class SettingsView(BaseView):
     def refresh(self):
         """Refresh the view's content."""
         self._check_webdriver_status()
+        self._load_current_settings()
 
     def _check_webdriver_status(self):
         """Check and update the webdriver status."""
@@ -198,3 +276,155 @@ class SettingsView(BaseView):
         # For now, just show a message
         messagebox.showinfo("Settings", "Settings saved successfully.")
         logger.info("Application settings updated.")
+
+    def _toggle_notifications(self):
+        """Toggle notifications on/off."""
+        enabled = self.notifications_switch.get()
+        settings_controller = self.controllers["settings"]
+        settings_controller.update_setting("notifications_enabled", enabled)
+
+        # Update notification manager immediately
+        from app.utils.notifications import notification_manager
+
+        notification_manager.set_enabled(enabled)
+
+        logger.info(f"Notifications {'enabled' if enabled else 'disabled'}")
+
+    def _test_notification(self):
+        """Send a test notification."""
+        monitoring_controller = self.controllers["monitoring"]
+        success = monitoring_controller.test_notification("settings_test")
+
+        if success:
+            messagebox.showinfo(
+                "Test Notification", "Test notification sent successfully!"
+            )
+        else:
+            messagebox.showwarning(
+                "Test Failed",
+                "Failed to send test notification. Check if notifications are enabled.",
+            )
+
+    def _reset_alerts(self):
+        """Reset all active alert states."""
+        monitoring_controller = self.controllers["monitoring"]
+        monitoring_controller.reset_alert_states()
+
+        messagebox.showinfo("Alerts Reset", "All alert states have been reset.")
+        logger.info("Alert states reset from settings")
+
+    def _save_notification_settings(self):
+        """Save all notification settings."""
+        try:
+            settings_controller = self.controllers["settings"]
+
+            # Collect notification settings from UI
+            notification_settings = {
+                "notifications_enabled": self.notifications_switch.get(),
+                "notification_cooldown": int(self.cooldown_entry.get()),
+                "memory_alert_threshold": float(self.memory_threshold_entry.get()),
+                "storage_alert_threshold": float(self.storage_threshold_entry.get()),
+                "cpu_alert_threshold": float(self.cpu_threshold_entry.get()),
+            }
+
+            # Validate threshold values
+            for key, value in notification_settings.items():
+                if key.endswith("_threshold") and not (0 <= value <= 100):
+                    raise ValueError(
+                        f"Threshold values must be between 0-100%. Invalid: {key}={value}"
+                    )
+                elif key == "notification_cooldown" and value < 60:
+                    raise ValueError(
+                        "Notification cooldown must be at least 60 seconds"
+                    )
+
+            # Update settings
+            success = settings_controller.update_notification_settings(
+                notification_settings
+            )
+
+            if success:
+                # Update notification manager with new settings
+                from app.utils.notifications import notification_manager
+
+                notification_manager.set_enabled(
+                    notification_settings["notifications_enabled"]
+                )
+                notification_manager.set_cooldown(
+                    notification_settings["notification_cooldown"]
+                )
+
+                messagebox.showinfo(
+                    "Success", "Notification settings saved successfully!"
+                )
+                logger.info("Notification settings updated")
+            else:
+                messagebox.showwarning(
+                    "Warning", "Some settings could not be updated. Check the logs."
+                )
+
+        except ValueError as e:
+            messagebox.showerror("Input Error", f"Invalid input: {str(e)}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save settings: {str(e)}")
+            logger.error(f"Error saving notification settings: {str(e)}")
+
+    def _load_current_settings(self):
+        """Load current settings into the UI fields."""
+        try:
+            settings_controller = self.controllers["settings"]
+
+            # Load monitoring interval
+            interval = settings_controller.get_setting("monitoring_interval")
+            if interval:
+                self.interval_entry.delete(0, tk.END)
+                self.interval_entry.insert(0, str(interval))
+
+            # Load concurrency setting
+            concurrency = settings_controller.get_setting("browser_concurrency")
+            if concurrency:
+                self.concurrency_entry.delete(0, tk.END)
+                self.concurrency_entry.insert(0, str(concurrency))
+
+            # Load default directory
+            default_dir = settings_controller.get_setting("default_directory")
+            if default_dir:
+                self.dir_entry.delete(0, tk.END)
+                self.dir_entry.insert(0, default_dir)
+
+            # Load notification settings
+            notification_settings = settings_controller.get_notification_settings()
+
+            # Set notifications switch
+            notifications_enabled = notification_settings.get(
+                "notifications_enabled", True
+            )
+            if notifications_enabled:
+                self.notifications_switch.select()
+            else:
+                self.notifications_switch.deselect()
+
+            # Set cooldown
+            cooldown = notification_settings.get("notification_cooldown", 300)
+            self.cooldown_entry.delete(0, tk.END)
+            self.cooldown_entry.insert(0, str(cooldown))
+
+            # Set memory threshold
+            memory_threshold = notification_settings.get("memory_alert_threshold", 85.0)
+            self.memory_threshold_entry.delete(0, tk.END)
+            self.memory_threshold_entry.insert(0, str(memory_threshold))
+
+            # Set storage threshold
+            storage_threshold = notification_settings.get(
+                "storage_alert_threshold", 90.0
+            )
+            self.storage_threshold_entry.delete(0, tk.END)
+            self.storage_threshold_entry.insert(0, str(storage_threshold))
+
+            # Set CPU threshold
+            cpu_threshold = notification_settings.get("cpu_alert_threshold", 90.0)
+            self.cpu_threshold_entry.delete(0, tk.END)
+            self.cpu_threshold_entry.insert(0, str(cpu_threshold))
+
+        except Exception as e:
+            logger.error(f"Error loading settings into UI: {str(e)}")

@@ -86,6 +86,44 @@ class MonitoringView(BaseView):
         self.mem_progressbar.set(0)
         self.disk_progressbar.set(0)
 
+        # Notification status section
+        notification_status_frame = ctk.CTkFrame(self)
+        notification_status_frame.pack(
+            pady=(0, self.padding), padx=self.padding, fill="x"
+        )
+
+        ctk.CTkLabel(
+            notification_status_frame,
+            text="Notification Status",
+            font=("Segoe UI", 12, "bold"),
+        ).pack(anchor="w", pady=(self.padding // 2, 0))
+
+        # Create status indicators
+        status_grid_frame = ctk.CTkFrame(notification_status_frame)
+        status_grid_frame.pack(fill="x", pady=self.padding // 2)
+
+        # Notifications enabled indicator
+        self.notifications_status_label = ctk.CTkLabel(
+            status_grid_frame, text="Notifications: Enabled", text_color="green"
+        )
+        self.notifications_status_label.pack(side="left", padx=(0, self.padding))
+
+        # Alert status indicators
+        self.memory_alert_label = ctk.CTkLabel(
+            status_grid_frame, text="Memory: Normal", text_color="green"
+        )
+        self.memory_alert_label.pack(side="left", padx=(0, self.padding))
+
+        self.storage_alert_label = ctk.CTkLabel(
+            status_grid_frame, text="Storage: Normal", text_color="green"
+        )
+        self.storage_alert_label.pack(side="left", padx=(0, self.padding))
+
+        self.cpu_alert_label = ctk.CTkLabel(
+            status_grid_frame, text="CPU: Normal", text_color="green"
+        )
+        self.cpu_alert_label.pack(side="left")
+
     def refresh(self):
         """
         Update resource display if needed.
@@ -121,6 +159,9 @@ class MonitoringView(BaseView):
             text=f"Disk: {resource_data['disk']['percent']}% ({disk_used_gb:.1f} GB / {disk_total_gb:.1f} GB)"
         )
 
+        # Update notification status
+        self._update_notification_status()
+
     def add_log(self, message: str):
         """Add a log message to the log text area."""
         self.log_text.insert(tk.END, f"{message}\n")
@@ -130,3 +171,55 @@ class MonitoringView(BaseView):
         """Clear the log text area."""
         self.log_text.delete("1.0", tk.END)
         self.controllers["monitoring"].clear_logs()
+
+    def _update_notification_status(self):
+        """Update the notification status indicators."""
+        try:
+            # Check if notifications are enabled
+            settings_controller = self.controllers["settings"]
+            notification_settings = settings_controller.get_notification_settings()
+            notifications_enabled = notification_settings.get(
+                "notifications_enabled", True
+            )
+
+            if notifications_enabled:
+                self.notifications_status_label.configure(
+                    text="Notifications: Enabled", text_color="green"
+                )
+            else:
+                self.notifications_status_label.configure(
+                    text="Notifications: Disabled", text_color="orange"
+                )
+
+            # Get current alert states
+            monitoring_controller = self.controllers["monitoring"]
+            alert_states = monitoring_controller.get_alert_states()
+
+            # Update memory alert status
+            if alert_states.get("memory_alert", False):
+                self.memory_alert_label.configure(
+                    text="Memory: ALERT", text_color="red"
+                )
+            else:
+                self.memory_alert_label.configure(
+                    text="Memory: Normal", text_color="green"
+                )
+
+            # Update storage alert status
+            if alert_states.get("storage_alert", False):
+                self.storage_alert_label.configure(
+                    text="Storage: ALERT", text_color="red"
+                )
+            else:
+                self.storage_alert_label.configure(
+                    text="Storage: Normal", text_color="green"
+                )
+
+            # Update CPU alert status
+            if alert_states.get("cpu_alert", False):
+                self.cpu_alert_label.configure(text="CPU: ALERT", text_color="red")
+            else:
+                self.cpu_alert_label.configure(text="CPU: Normal", text_color="green")
+
+        except Exception as e:
+            logger.error(f"Error updating notification status: {str(e)}")
