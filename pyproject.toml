@@ -10,5 +10,5 @@ dependencies = [
     "playwright-stealth>=1.0.6",
     "psutil>=7.0.0",
     "setuptools>=78.1.0",
-    "win10toast>=0.9",
+    "win10toast>=0.9; sys_platform == 'win32'",
 ]
