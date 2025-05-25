@@ -1,6 +1,10 @@
 name: Lint
 
-on: [push]
+on: [push, pull_request]
+
+permissions:
+  contents: read
+  checks: write
 
 jobs:
   pylint:
@@ -13,11 +17,28 @@ jobs:
         with:
           python-version: 3.12
 
-      - name: Install project & pylint
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .
-          pip install pylint
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
 
-      - name: Lint (no-fail)
-        run: pylint --exit-zero $(git ls-files '*.py')
+      - name: Install project dependencies
+        run: |
+          uv sync
+
+      - name: Run pylint
+        run: |
+          echo "::group::📋 Pylint report"
+          uv run pylint \
+            --rcfile=pyproject.toml \
+            --load-plugins=pylint_actions \
+            --output-format=github \
+            --reports=y \
+            $(find . -name "*.py" \
+              -not -path "./.venv/*" \
+              -not -path "./build/*" \
+              -not -path "./dist/*" \
+              -not -path "./__pycache__/*")
+          echo "::endgroup::"
+          echo "✅ Pylint passed" \
+            || (echo "❌ Pylint failed"; exit 1)

@@ -9,5 +9,13 @@ dependencies = [
     "patchright>=1.51.0",
     "playwright-stealth>=1.0.6",
     "psutil>=7.0.0",
+    "pylint>=3.3.7",
     "setuptools>=78.1.0",
+    "pylint-actions",
 ]
+
+[tool.pylint.main]
+fail-under = 8.0
+
+[tool.pylint.messages_control]
+disable = ["missing-module-docstring", "too-few-public-methods"]
