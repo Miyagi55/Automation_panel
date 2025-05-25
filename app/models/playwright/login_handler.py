@@ -9,14 +9,9 @@ try:
 except ImportError:
     winsound = None
 
-# Third-party optional toaster
-try:
-    from win10toast import ToastNotifier
-except ImportError:
-    ToastNotifier = None
-
 # Local application imports
 from app.utils.config import LINK_LOGIN, LOGIN_POST_LOAD_DELAY
+from app.utils.notifications import notification_manager
 from app.utils.randomizer import Randomizer
 
 
@@ -82,16 +77,10 @@ class LoginHandler:
             if captcha_detected:
                 # Trigger OS toast notification with sound for captcha detection
                 def _notify():
-                    # Use top-level imports to notify
-                    if ToastNotifier:
-                        toaster = ToastNotifier()
-                        toaster.show_toast(
-                            "Facebook Automation Panel",
-                            f"Captcha detected for account {account_id}",
-                            duration=10,
-                            threaded=True,
-                        )
-                    elif winsound:
+                    # Use cross-platform notification manager
+                    notification_manager.show_captcha_alert(account_id)
+                    # Fallback sound notification
+                    if winsound:
                         winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
 
                 threading.Thread(target=_notify, daemon=True).start()
