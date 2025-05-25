@@ -1,6 +1,6 @@
 name: Lint
 
-on: [push]
+on: [push, pull_request]
 
 jobs:
   pylint:
@@ -24,4 +24,4 @@ jobs:
 
       - name: Run pylint
         run: |
-          uv run pylint --rcfile=pyproject.toml $(find . -name "*.py" -not -path "./.venv/*" -not -path "./build/*" -not -path "./dist/*" -not -path "./__pycache__/*")
+          uv run pylint --rcfile=pyproject.toml --load-plugins=pylint_actions --output-format=actions $(find . -name "*.py" -not -path "./.venv/*" -not -path "./build/*" -not -path "./dist/*" -not -path "./__pycache__/*")
