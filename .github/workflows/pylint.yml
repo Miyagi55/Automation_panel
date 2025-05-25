@@ -24,4 +24,11 @@ jobs:
 
       - name: Run pylint
         run: |
-          uv run pylint --rcfile=pyproject.toml --load-plugins=pylint_actions --output-format=actions $(find . -name "*.py" -not -path "./.venv/*" -not -path "./build/*" -not -path "./dist/*" -not -path "./__pycache__/*")
+          uv run pylint \
+            --rcfile=pyproject.toml \
+            --load-plugins=pylint_actions \
+            --output-format=github \
+            --reports=y \
+            $(find . -name "*.py" -not -path "./.venv/*" -not -path "./build/*" -not -path "./dist/*" -not -path "./__pycache__/*") \
+            && echo "✅ Pylint passed" \
+            || (echo "❌ Pylint failed"; exit 1)
