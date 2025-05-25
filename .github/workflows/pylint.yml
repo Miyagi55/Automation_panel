@@ -2,6 +2,10 @@ name: Lint
 
 on: [push, pull_request]
 
+permissions:
+  contents: read
+  checks: write
+
 jobs:
   pylint:
     runs-on: ubuntu-latest
@@ -24,11 +28,17 @@ jobs:
 
       - name: Run pylint
         run: |
+          echo "::group::📋 Pylint report"
           uv run pylint \
             --rcfile=pyproject.toml \
             --load-plugins=pylint_actions \
             --output-format=github \
             --reports=y \
-            $(find . -name "*.py" -not -path "./.venv/*" -not -path "./build/*" -not -path "./dist/*" -not -path "./__pycache__/*") \
-            && echo "✅ Pylint passed" \
+            $(find . -name "*.py" \
+              -not -path "./.venv/*" \
+              -not -path "./build/*" \
+              -not -path "./dist/*" \
+              -not -path "./__pycache__/*")
+          echo "::endgroup::"
+          echo "✅ Pylint passed" \
             || (echo "❌ Pylint failed"; exit 1)
