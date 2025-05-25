@@ -1,6 +1,6 @@
 # Facebook Automation Panel
 
-A graphical application for managing and automating Facebook accounts using Python and Playwright.
+A cross-platform graphical application for managing and automating Facebook accounts using Python and Playwright.
 
 ## Features
 
@@ -8,7 +8,8 @@ A graphical application for managing and automating Facebook accounts using Pyth
 - Facebook automation workflows
 - Session persistence
 - Stealth browsing
-- System resource monitoring
+- System resource monitoring with alerts
+- Cross-platform toast notifications
 - Concurrent operations
 
 ## Architecture
@@ -41,16 +42,24 @@ Controllers coordinate between models and views:
 ### Utilities
 
 - `utils/logger.py`: Centralized logging system
+- `utils/notifications.py`: Cross-platform notification system
 
 ## Requirements
 
-- Python 3.12+
+- Python 3.10+
 - Required packages:
   - customtkinter>=5.2.2
   - patchright>=1.51.0
   - playwright-stealth>=1.0.6
+  - plyer>=2.1.0 (cross-platform notifications)
   - psutil>=7.0.0
   - setuptools>=78.1.0
+
+## Platform Support
+
+- **Windows**: Native toast notifications
+- **macOS**: Notification Center integration
+- **Linux**: D-Bus notifications (libnotify)
 
 ## Installation
 

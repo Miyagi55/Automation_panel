@@ -5,15 +5,16 @@ This application provides a graphical interface for Facebook automation tasks.
 It uses an MVC architecture to separate concerns and promote maintainability.
 """
 
+import argparse
+from typing import Any, Dict
+
 import customtkinter as ctk
 
-#Load all local packages
+# Load all local packages
 from app.controllers import *
-from app.views import *
 from app.utils.logger import logger
+from app.views import *
 
-from typing import Any, Dict
-import argparse
 
 class FacebookAutomationApp:
     """
@@ -50,22 +51,24 @@ class FacebookAutomationApp:
 
     def setup_controllers(self):
         """Set up the controllers."""
+        # Create the settings controller first
+        from app.controllers.settings_controller import SettingsController
+
+        self.settings_controller = SettingsController()
+
         # Create the controllers
         self.browser_controller = BrowserController()
         self.account_controller = AccountController(
             update_ui_callback=self.refresh_account_view
         )
         self.monitoring_controller = MonitoringController(
-            update_callback=self.update_resource_display
+            update_callback=self.update_resource_display,
+            settings_controller=self.settings_controller,
         )
         self.automation_controller = AutomationController(
             update_ui_callback=self.refresh_workflow_view,
             progress_callback=self.update_workflow_progress,
         )
-        # Add the settings controller
-        from app.controllers.settings_controller import SettingsController
-
-        self.settings_controller = SettingsController()
 
         # Store controllers in a dictionary for easy access
         self.controllers = {
@@ -73,7 +76,7 @@ class FacebookAutomationApp:
             "automation": self.automation_controller,
             "monitoring": self.monitoring_controller,
             "browser": self.browser_controller,
-            "settings": self.settings_controller,  # Add the settings controller
+            "settings": self.settings_controller,
         }
 
         # Don't start monitoring here - moved to init after setup_views()
@@ -132,7 +135,6 @@ class FacebookAutomationApp:
         # Show and refresh the selected view
         if section_name in self.views:
             self.views[section_name].show()
-            
 
     def toggle_theme(self):
         """Toggle between light and dark themes."""

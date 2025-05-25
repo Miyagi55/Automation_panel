@@ -8,6 +8,7 @@ dependencies = [
     "customtkinter>=5.2.2",
     "patchright>=1.51.0",
     "playwright-stealth>=1.0.6",
+    "plyer>=2.1.0",
     "psutil>=7.0.0",
     "setuptools>=78.1.0",
 ]

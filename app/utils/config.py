@@ -8,7 +8,9 @@ import __main__
 # Configurable CONSTANTS
 
 ACCOUNT_TEST_BROWSER_TIMEOUT_SECONDS = 60  #  Edit as needed
-LINK_LOGIN = "https://www.facebook.com/login"
+LINK_LOGIN = (
+    "https://www.facebook.com/login"  # TODO - hardcode base url instead of this
+)
 OS = os.name  # 'nt' for Windows, 'posix' for Linux/Mac
 
 

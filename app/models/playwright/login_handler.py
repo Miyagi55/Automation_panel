@@ -1,8 +1,17 @@
 import asyncio
 import random
+import threading
 from typing import Any, Callable
 
-from app.utils.config import LOGIN_POST_LOAD_DELAY
+# Fallback for sound notifications (standard library)
+try:
+    import winsound
+except ImportError:
+    winsound = None
+
+# Local application imports
+from app.utils.config import LINK_LOGIN, LOGIN_POST_LOAD_DELAY
+from app.utils.notifications import notification_manager
 from app.utils.randomizer import Randomizer
 
 
@@ -22,7 +31,6 @@ class LoginHandler:
         """Executes the login process and returns True if successful."""
         try:
             page = await browser.new_page()
-            from app.utils.config import LINK_LOGIN
 
             await page.goto(LINK_LOGIN, wait_until="domcontentloaded", timeout=60000)
             log_func(f"Navigated to login page for account {account_id}")
@@ -52,11 +60,30 @@ class LoginHandler:
             await Randomizer.sleep(*LOGIN_POST_LOAD_DELAY)
             current_url = page.url
 
-            # Check for CAPTCHA or checkpoint (2FA)
-            if (
+            # Simple captcha detection: URL redirect or Recaptcha iframe
+            captcha_detected = (
                 "/checkpoint/" in current_url
                 or "/two_step_verification/" in current_url
-            ):
+            )
+            if not captcha_detected:
+                try:
+                    await page.wait_for_selector(
+                        "iframe[src*='recaptcha']", timeout=3000
+                    )
+                    captcha_detected = True
+                except Exception:
+                    pass
+
+            if captcha_detected:
+                # Trigger OS toast notification with sound for captcha detection
+                def _notify():
+                    # Use cross-platform notification manager
+                    notification_manager.show_captcha_alert(account_id)
+                    # Fallback sound notification
+                    if winsound:
+                        winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+
+                threading.Thread(target=_notify, daemon=True).start()
                 log_func(
                     f"CAPTCHA or 2FA checkpoint detected for account {account_id}. Waiting {captcha_timeout} seconds for resolution..."
                 )
