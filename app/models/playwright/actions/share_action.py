@@ -26,7 +26,7 @@ class ShareAction(AutomationAction):
         url = action_data.get("link", "")
         debug = action_data.get("debug", True)
 
-        # Extract URL from the link field if it contains a URL within text
+        # Extract URL from the link field if it contains a URL within text TODO: make field validators for this instead
         extracted_url = self._extract_url(url)
         if extracted_url is not None:
             url = extracted_url
@@ -41,6 +41,20 @@ class ShareAction(AutomationAction):
                 f"URL does not start with http:// or https:// for account {account_id}"
             )
             return False
+
+        # case 1: normal post
+        if "/share/p" in url:
+            log_func(f"Normal post share action for account {account_id}")
+            return await self._handle_normal_post(
+                account_id, action_data, log_func, browser
+            )
+
+        # case 2: video post
+        if "/share/v" in url:
+            log_func(f"Video post share action for account {account_id}")
+            return await self._handle_video_post(
+                account_id, action_data, log_func, browser
+            )
 
         browser_utils = BrowserUtils(account_id, log_func)
         user_data_dir = browser_utils.get_session_dir()
