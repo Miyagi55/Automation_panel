@@ -1,9 +1,17 @@
 import re
+from enum import Enum
 from typing import Any, Callable, Dict, Optional
 
 from app.models.playwright.actions.browser_utils import BrowserUtils
 from app.models.playwright.base_action import AutomationAction
 from app.utils.randomizer import Randomizer
+
+
+class PostType(Enum):
+    NORMAL = "normal"  # eg: https://www.facebook.com/share/p/1234567890 pattern: "/p/"
+    VIDEO = "video"  # eg: https://www.facebook.com/share/v/1G9GWrjMZb/ pattern: "/v/"
+    REEL = "reel"  # eg: https://www.facebook.com/share/r/16HzqZ3SKQ/ pattern: "/r/"
+    LIVE = "live"  # eg: https://www.facebook.com/share/v/16WuKb9k51/ pattern: "/v/"
 
 
 class ShareAction(AutomationAction):
@@ -115,11 +123,12 @@ class ShareAction(AutomationAction):
         try:
             # Run the JavaScript to find the dialog and share buttons
             result = await page.evaluate("""() => {
+                
+                // This identifies the post dialog:
+                
                 return new Promise((resolve) => {
                     // Find the visible post dialog
-                    const postDialog = Array.from(
-                        document.querySelectorAll('div[role="dialog"][aria-labelledby]')
-                    ).find(dlg => dlg.offsetParent !== null);
+                    const postDialog = Array.from(document.querySelectorAll('div[role="dialog"][aria-labelledby]')).find(dlg => dlg.offsetParent !== null)
                     
                     if (!postDialog) {
                         console.warn('❌ No post dialog found');
@@ -128,6 +137,8 @@ class ShareAction(AutomationAction):
                     }
                     
                     // Find the share button in the dialog
+                    // TODO: this is a common pattern for for the post dialog, should DRY.
+                    // NOTE: selectors are truncated but functional:
                     const openBtn = postDialog.querySelector(
                         '[role="button"][aria-label^="Send this to"],' +
                         '[role="button"][aria-label^="Envía esto a"]'
@@ -146,6 +157,9 @@ class ShareAction(AutomationAction):
                         view: window
                     }));
                     
+                    // Confirm button
+                    // NOTE: this is a common pattern for share dialogs. ()
+                    // TODO: for other posts beside normal posts, we need to find the correct button to click.
                     // Wait for the Share Now button to appear and click it
                     setTimeout(() => {
                         const shareNowBtn = document.querySelector(
@@ -234,7 +248,8 @@ class ShareAction(AutomationAction):
                 # Log all dialogs after clicking to see what appeared
                 await self._log_visible_dialogs(page, log_func)
 
-                # Define the 'Share now' selector for dialog
+                # Define the 'Share now' selector for dialog (COMMON)
+                # TODO: this ones common and should be reused.
                 share_now_selector = (
                     'div[role="button"][aria-label="Share now"], '
                     'div[role="button"][aria-label="Compartir ahora"]'
@@ -311,6 +326,7 @@ class ShareAction(AutomationAction):
     ) -> None:
         """Log information about visible dialogs on the page."""
         try:
+            # wtf is this?
             dialog_info = await page.evaluate("""
                 () => {
                     const dialogs = Array.from(document.querySelectorAll('div[role="dialog"]'));
