@@ -484,19 +484,50 @@ class VideoPostShareHandler(ShareHandler):
             # Wait for the page to stabilize
             await Randomizer.sleep(3.0, 5.0)
 
-            # Try to find and click the share button using JavaScript
+            # Try to find and click the share button using JavaScript with more specific targeting
             result = await page.evaluate("""() => {
                 return new Promise((resolve) => {
-                    // Look for the share button by aria-label
-                    const shareButtons = Array.from(document.querySelectorAll('[aria-label="Share"], [aria-label="Compartir"]'));
+                    // Look for share buttons with multiple approaches
+                    let shareButtons = [];
                     
-                    // Filter visible buttons
+                    // Approach 1: Look for aria-label with exact text
+                    const ariaLabelButtons = Array.from(document.querySelectorAll(
+                        '[aria-label="Send this to friends or post it on your profile."], ' +
+                        '[aria-label="Envía esto a tus amigos o publícalo en tu perfil."], ' +
+                        '[aria-label="Share"], ' +
+                        '[aria-label="Compartir"]'
+                    ));
+                    shareButtons = shareButtons.concat(ariaLabelButtons);
+                    
+                    // Approach 2: Look for span with text "Share"
+                    const shareSpans = Array.from(document.querySelectorAll('span')).filter(span => {
+                        const text = span.textContent.trim();
+                        return text === 'Share' || text === 'Compartir';
+                    });
+                    
+                    // Get parent buttons of these spans
+                    shareSpans.forEach(span => {
+                        let el = span;
+                        // Walk up to find closest button or div with role=button
+                        while (el && el !== document.body) {
+                            if (el.getAttribute('role') === 'button' || el.tagName === 'BUTTON') {
+                                shareButtons.push(el);
+                                break;
+                            }
+                            el = el.parentElement;
+                        }
+                    });
+                    
+                    // Filter for visible buttons only
                     const visibleShareButtons = shareButtons.filter(btn => {
+                        if (!btn) return false;
                         const rect = btn.getBoundingClientRect();
                         return rect.width > 0 && rect.height > 0 && 
                                window.getComputedStyle(btn).display !== 'none' && 
                                btn.offsetParent !== null;
                     });
+                    
+                    console.log('Found ' + visibleShareButtons.length + ' potential share buttons');
                     
                     if (visibleShareButtons.length === 0) {
                         console.warn('❌ No visible share buttons found');
