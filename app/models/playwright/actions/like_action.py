@@ -30,54 +30,88 @@ class LikeAction(AutomationAction):
         self,
         account_id: str,
         account_data: Dict[str, Any],
-        context: Any,
+        action_data: Dict[str, Any],
         log_func: Callable[[str], None],
-        randomizer: Randomizer,
+        browser: Optional[Any] = None,
     ) -> bool:
-        """Execute the like action."""
+        """Execute the like action on a Facebook post."""
+        url = action_data.get("link", "")
+        debug = action_data.get("debug", True)
+        if not url:
+            log_func(f"No URL provided for Like action on account {account_id}")
+            return False
+
+        self.log_func = log_func
+        self.account_id = account_id
+
+        log_func(f"Starting Like action for account {account_id}")
+
         try:
-            self.log_func = log_func
-            self.log_func(f"Starting Like action for account {account_id}")
+            # Import browser utils
+            from .browser_utils import BrowserUtils
 
-            page = context
-            element_utils = ElementUtils(log_func)
+            browser_utils = BrowserUtils(account_id, log_func)
+            user_data_dir = browser_utils.get_session_dir()
 
-            # Navigate to the URL
-            post_url = account_data.get("post_url", "")
-            if post_url:
-                await page.goto(post_url, wait_until="networkidle", timeout=60000)
-                self.log_func(f"Successfully navigated to URL (account {account_id})")
-            else:
-                self.log_func(f"No post URL provided (account {account_id})")
-                return False
+            (
+                created_browser,
+                playwright,
+                browser,
+            ) = await browser_utils.initialize_browser(browser, user_data_dir)
+
+            page = await browser.new_page()
+
+            # Navigate to URL
+            await page.goto(url, wait_until="networkidle", timeout=60000)
+            log_func(f"Successfully navigated to URL (account {account_id})")
 
             # Add small delay to let page settle
-            await randomizer.sleep(*LIKE_ACTION_DELAY_RANGE)
+            await Randomizer.sleep(*LIKE_ACTION_DELAY_RANGE)
 
-            # Find like button directly on the page (not in overlay)
+            # Try to find like button using element utils
+            element_utils = ElementUtils(log_func)
+
+            # First try to find like button directly on the page
             like_button = await element_utils.finder.find_element_by_selector_group(
                 page, FacebookSelectors.LIKE_BUTTONS, account_id=account_id
             )
 
             if not like_button:
-                self.log_func(f"No like button found on page (account {account_id})")
+                # Try overlay approach
+                overlay = await self._wait_for_post_overlay(page, debug)
+                if overlay:
+                    like_button, button_name = await self._find_like_button(
+                        overlay, debug
+                    )
+                else:
+                    # Try scrolling main page approach
+                    log_func(
+                        f"No overlay found, scrolling main page for Like button for account {account_id}"
+                    )
+                    (
+                        like_button,
+                        button_name,
+                    ) = await self._find_like_button_on_main_page(page, debug)
+
+            if not like_button:
+                log_func(f"No like button found on page (account {account_id})")
                 return False
 
-            # Click the like button
+            # Click the like button using element utils
             click_success = await element_utils.clicker.click_element(
                 like_button, "Like button", account_id
             )
 
             if not click_success:
-                self.log_func(f"Failed to click like button (account {account_id})")
+                log_func(f"Failed to click like button (account {account_id})")
                 return False
 
             # Wait for the action to complete
-            await randomizer.sleep(0.5, 1.5)
-            self.log_func(f"Like action completed successfully (account {account_id})")
+            await Randomizer.sleep(0.5, 1.5)
+            log_func(f"Like action completed successfully (account {account_id})")
 
-            # Optional verification (less strict)
-            await randomizer.sleep(0.5, 1.0)
+            # Optional verification
+            await Randomizer.sleep(0.5, 1.0)
             unlike_button = await element_utils.finder.find_element_by_selector_group(
                 page,
                 FacebookSelectors.UNLIKE_BUTTONS,
@@ -86,28 +120,26 @@ class LikeAction(AutomationAction):
             )
 
             if unlike_button:
-                self.log_func(
-                    f"Like action verified successfully (account {account_id})"
-                )
+                log_func(f"Like action verified successfully (account {account_id})")
             else:
-                self.log_func(
+                log_func(
                     f"Like action verification inconclusive (account {account_id})"
                 )
 
             return True
 
         except Exception as e:
-            self.log_func(f"Like action failed: {str(e)} (account {account_id})")
+            log_func(f"Like action failed: {str(e)} (account {account_id})")
             return False
-
-    async def _navigate_to_url(self, page: Any, url: str) -> bool:
-        """Navigate to the specified URL."""
-        try:
-            await page.goto(url, wait_until="load", timeout=60000)
-            return True
-        except Exception as e:
-            self._log_error(f"Navigation failed: {str(e)}")
-            return False
+        finally:
+            # Cleanup
+            try:
+                if "browser_utils" in locals():
+                    await browser_utils.cleanup_browser(
+                        created_browser, browser, playwright
+                    )
+            except Exception as e:
+                log_func(f"Error during cleanup for account {account_id}: {str(e)}")
 
     async def _wait_for_post_overlay(self, page: Any, debug: bool) -> Optional[Any]:
         """Wait for the post overlay to load, if present."""
@@ -287,112 +319,11 @@ class LikeAction(AutomationAction):
             f"{name} button - Text: {text_content}, Aria-label: {aria_label}, Visible: {is_visible}, Enabled: {is_enabled}"
         )
 
-    async def _click_button(self, button: Any, button_name: str, debug: bool) -> bool:
-        """Attempt to click the specified button using multiple methods."""
-        try:
-            await Randomizer.sleep(*LIKE_ACTION_DELAY_RANGE)
-            await button.focus()
-            self._log_info(f"Focused {button_name} button")
-
-            click_methods = [
-                (lambda: button.click(timeout=10000), "standard click"),
-                (lambda: button.evaluate("el => el.click()"), "JavaScript click"),
-                (
-                    lambda: button.evaluate(
-                        """el => {
-                        const event = new MouseEvent('click', {bubbles: true, cancelable: true});
-                        el.dispatchEvent(event);
-                    }"""
-                    ),
-                    "dispatched click event",
-                ),
-            ]
-
-            for attempt in range(3):
-                for click_fn, method_name in click_methods:
-                    if await self._attempt_click_methods(
-                        click_fn, button_name, method_name, attempt, debug
-                    ):
-                        return True
-                if attempt < 2:
-                    await Randomizer.sleep(*LIKE_ACTION_DELAY_RANGE)
-
-            if debug:
-                parent_html = await button.evaluate(
-                    "(element) => element.parentElement.outerHTML"
-                )
-                self._log_info(f"Parent HTML of {button_name} button: {parent_html}")
-            self._log_info(f"All click attempts failed for {button_name} button")
-            return False
-        except Exception as e:
-            self._log_error(
-                f"Error during click attempt for {button_name} button: {str(e)}"
-            )
-            return False
-
-    async def _attempt_click_methods(
-        self,
-        click_fn: Callable,
-        button_name: str,
-        method_name: str,
-        attempt: int,
-        debug: bool,
-    ) -> bool:
-        """Attempt a single click method."""
-        try:
-            await click_fn()
-            self._log_info(
-                f"Clicked {button_name} button ({method_name}, attempt {attempt + 1})"
-            )
-            if debug:
-                self._log_info("Pausing for 1.5 seconds to display Like action")
-            await Randomizer.sleep(*LIKE_ACTION_DELAY_RANGE)
-            return True
-        except Exception as e:
-            self._log_error(
-                f"{method_name.capitalize()} failed (attempt {attempt + 1}): {str(e)}"
-            )
-            return False
-
-    async def _verify_and_cleanup(
-        self, page: Any, button: Any, created_browser: bool, browser: Any, debug: bool
-    ) -> bool:
-        """Verify the click action and close the browser if created."""
-        try:
-            await Randomizer.sleep(*LIKE_ACTION_DELAY_RANGE)
-            button = await page.query_selector(
-                '[aria-label="Unlike"], [aria-label="No me gusta"], '
-                '[aria-label="Like"], [aria-label="Me gusta"], '
-                '[aria-label="React"], [aria-label="Reaccionar"]'
-            )
-            if button:
-                is_liked = await button.evaluate(
-                    "(el) => el.getAttribute('aria-label')?.includes('Unlike') || el.getAttribute('aria-label')?.includes('No me gusta')"
-                )
-                if debug:
-                    class_list = await button.evaluate(
-                        "(el) => Array.from(el.classList)"
-                    )
-                    self._log_info(f"Button classes on verification: {class_list}")
-                self._log_info(
-                    f"Like action {'successful' if is_liked else 'may not have succeeded'}"
-                )
-            else:
-                self._log_info("No button found for verification")
-        except Exception as e:
-            self._log_error(f"Failed to verify Like action: {str(e)}")
-        return True
-
     def _log_info(self, message: str) -> None:
         """Log an info message with account ID."""
-        if hasattr(self, "_log_func") and hasattr(self, "_account_id"):
-            self._log_func(f"{message} for account {self._account_id}")
+        if hasattr(self, "log_func") and hasattr(self, "account_id"):
+            self.log_func(f"{message} for account {self.account_id}")
 
     def _log_error(self, message: str) -> None:
         """Log an error message with account ID."""
         self._log_info(f"Error: {message}")
-
-    def __init_log(self, account_id: str, log_func: Callable[[str], None]) -> None:
-        """Initialize logging attributes."""
-        self._account_id = account_id
-        self._log_func = log_func
