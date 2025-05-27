@@ -476,9 +476,81 @@ class VideoPostShareHandler(ShareHandler):
     async def handle_share(self, page: Any, account_id: str) -> bool:
         """Handle sharing of video posts."""
         self.log_func(f"Video post share action for account {account_id}")
-        # TODO: Implement video-specific share logic
-        self.log_func("Video post sharing not yet implemented")
-        return False
+
+        try:
+            # Direct approach without dialog validation
+            self.log_func("Attempting direct share button click for video")
+
+            # Wait for the page to stabilize
+            await Randomizer.sleep(3.0, 5.0)
+
+            # Try to find and click the share button using JavaScript
+            result = await page.evaluate("""() => {
+                return new Promise((resolve) => {
+                    // Look for the share button by aria-label
+                    const shareButtons = Array.from(document.querySelectorAll('[aria-label="Share"], [aria-label="Compartir"]'));
+                    
+                    // Filter visible buttons
+                    const visibleShareButtons = shareButtons.filter(btn => {
+                        const rect = btn.getBoundingClientRect();
+                        return rect.width > 0 && rect.height > 0 && 
+                               window.getComputedStyle(btn).display !== 'none' && 
+                               btn.offsetParent !== null;
+                    });
+                    
+                    if (visibleShareButtons.length === 0) {
+                        console.warn('❌ No visible share buttons found');
+                        resolve({success: false, error: 'No visible share buttons found'});
+                        return;
+                    }
+                    
+                    // Click the first visible share button
+                    const shareBtn = visibleShareButtons[0];
+                    console.log('Found share button:', shareBtn);
+                    
+                    // Click to open share dialog
+                    shareBtn.dispatchEvent(new MouseEvent('click', {
+                        bubbles: true,
+                        cancelable: true,
+                        view: window
+                    }));
+                    
+                    // Wait for share dialog and click "Share now"
+                    setTimeout(() => {
+                        // Look for "Share now" button in any visible dialog
+                        const shareNowBtn = document.querySelector(
+                            'div[role="button"][aria-label="Share now"], ' +
+                            'div[role="button"][aria-label="Compartir ahora"]'
+                        );
+                        
+                        if (shareNowBtn) {
+                            shareNowBtn.dispatchEvent(new MouseEvent('click', {
+                                bubbles: true,
+                                cancelable: true,
+                                view: window
+                            }));
+                            
+                            setTimeout(() => {
+                                resolve({success: true});
+                            }, 1000);
+                        } else {
+                            console.warn('❌ Share Now button not found');
+                            resolve({success: false, error: 'Share Now button not found'});
+                        }
+                    }, 1000);
+                });
+            }""")
+
+            self.log_func(f"JavaScript execution result: {result}")
+
+            # Wait for the share action to complete
+            await Randomizer.sleep(3.0, 5.0)
+
+            return result.get("success", False)
+
+        except Exception as e:
+            self.log_func(f"Error during video share: {str(e)}")
+            return False
 
 
 class ReelPostShareHandler(ShareHandler):
@@ -487,9 +559,81 @@ class ReelPostShareHandler(ShareHandler):
     async def handle_share(self, page: Any, account_id: str) -> bool:
         """Handle sharing of reel posts."""
         self.log_func(f"Reel post share action for account {account_id}")
-        # TODO: Implement reel-specific share logic
-        self.log_func("Reel post sharing not yet implemented")
-        return False
+
+        try:
+            # Direct approach without dialog validation
+            self.log_func("Attempting direct share button click for reel")
+
+            # Wait for the page to stabilize
+            await Randomizer.sleep(3.0, 5.0)
+
+            # Try to find and click the share button using JavaScript
+            result = await page.evaluate("""() => {
+                return new Promise((resolve) => {
+                    // Look for the share button by aria-label
+                    const shareButtons = Array.from(document.querySelectorAll('[aria-label="Share"], [aria-label="Compartir"]'));
+                    
+                    // Filter visible buttons
+                    const visibleShareButtons = shareButtons.filter(btn => {
+                        const rect = btn.getBoundingClientRect();
+                        return rect.width > 0 && rect.height > 0 && 
+                               window.getComputedStyle(btn).display !== 'none' && 
+                               btn.offsetParent !== null;
+                    });
+                    
+                    if (visibleShareButtons.length === 0) {
+                        console.warn('❌ No visible share buttons found');
+                        resolve({success: false, error: 'No visible share buttons found'});
+                        return;
+                    }
+                    
+                    // Click the first visible share button
+                    const shareBtn = visibleShareButtons[0];
+                    console.log('Found share button:', shareBtn);
+                    
+                    // Click to open share dialog
+                    shareBtn.dispatchEvent(new MouseEvent('click', {
+                        bubbles: true,
+                        cancelable: true,
+                        view: window
+                    }));
+                    
+                    // Wait for share dialog and click "Share now"
+                    setTimeout(() => {
+                        // Look for "Share now" button in any visible dialog
+                        const shareNowBtn = document.querySelector(
+                            'div[role="button"][aria-label="Share now"], ' +
+                            'div[role="button"][aria-label="Compartir ahora"]'
+                        );
+                        
+                        if (shareNowBtn) {
+                            shareNowBtn.dispatchEvent(new MouseEvent('click', {
+                                bubbles: true,
+                                cancelable: true,
+                                view: window
+                            }));
+                            
+                            setTimeout(() => {
+                                resolve({success: true});
+                            }, 1000);
+                        } else {
+                            console.warn('❌ Share Now button not found');
+                            resolve({success: false, error: 'Share Now button not found'});
+                        }
+                    }, 1000);
+                });
+            }""")
+
+            self.log_func(f"JavaScript execution result: {result}")
+
+            # Wait for the share action to complete
+            await Randomizer.sleep(3.0, 5.0)
+
+            return result.get("success", False)
+
+        except Exception as e:
+            self.log_func(f"Error during reel share: {str(e)}")
+            return False
 
 
 class LivePostShareHandler(ShareHandler):
