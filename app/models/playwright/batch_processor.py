@@ -1,5 +1,6 @@
 import asyncio
-from typing import Any, Callable, Dict, List, Tuple, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
 
 class BatchProcessor:
     """Handles batch processing of multiple accounts with concurrency control."""
@@ -16,7 +17,7 @@ class BatchProcessor:
         log_func: Callable[[str], None],
         batch_size: int = 3,
         concurrent_limit: int = 9,
-        **kwargs
+        **kwargs,
     ) -> Dict[Any, Tuple[bool, bool]]:
         """
         Generic method to process items in batches with concurrency control.
@@ -32,7 +33,9 @@ class BatchProcessor:
         self.browser_contexts.clear()  # Clear previous browser contexts
         self.playwright_instances.clear()  # Clear previous Playwright instances
 
-        async def process_item_with_semaphore(item: Any) -> Tuple[Any, Tuple[bool, bool]]:
+        async def process_item_with_semaphore(
+            item: Any,
+        ) -> Tuple[Any, Tuple[bool, bool]]:
             async with semaphore:
                 log_func(f"Starting processing for item {item}")
                 try:
@@ -44,7 +47,9 @@ class BatchProcessor:
                     action_success, sim_success, browser, playwright_instance = result
                     self.browser_contexts[item] = browser
                     self.playwright_instances[item] = playwright_instance
-                    log_func(f"Stored browser context and Playwright instance for item {item}")
+                    log_func(
+                        f"Stored browser context and Playwright instance for item {item}"
+                    )
                     return item, (action_success, sim_success)
                 except Exception as e:
                     log_func(f"Error processing item {item}: {str(e)}")
@@ -83,7 +88,9 @@ class BatchProcessor:
         # Map account_id to account details
         account_map = {account["account_id"]: account for account in accounts}
 
-        async def login_task(account_id: str, log_func: Callable[[str], None]) -> Tuple[bool, bool, Optional[Any], Optional[Any]]:
+        async def login_task(
+            account_id: str, log_func: Callable[[str], None]
+        ) -> Tuple[bool, bool, Optional[Any], Optional[Any]]:
             account = account_map.get(account_id)
             if not account:
                 log_func(f"Account not found for account_id {account_id}")
@@ -101,33 +108,39 @@ class BatchProcessor:
             process_func=login_task,
             log_func=log_func,
             batch_size=batch_size,
-            concurrent_limit=concurrent_limit
+            concurrent_limit=concurrent_limit,
         )
         return results
 
     def get_browser_context(self, item: Any) -> Optional[Any]:
         """Retrieve stored browser context for an item if it's still open."""
         browser = self.browser_contexts.get(item)
-        if browser and hasattr(browser, '_closed') and browser._closed:
+        if browser and hasattr(browser, "_closed") and browser._closed:
             return None
         return browser
 
     async def cleanup(self, log_func: Callable[[str], None]):
         """Close all stored browser contexts and stop Playwright instances."""
         for item, browser in list(self.browser_contexts.items()):
-            if browser and not (hasattr(browser, '_closed') and browser._closed):
+            if browser and not (hasattr(browser, "_closed") and browser._closed):
                 try:
                     await browser.close()
-                    log_func(f"Closed browser context for item {item}")  # Simplified log
+                    log_func(
+                        f"Closed browser context for item {item}"
+                    )  # Simplified log
                 except Exception as e:
                     log_func(f"Error closing browser context for item {item}: {str(e)}")
         for item, playwright_instance in list(self.playwright_instances.items()):
             if playwright_instance:
                 try:
                     await playwright_instance.stop()
-                    log_func(f"Stopped Playwright instance for item {item}")  # Simplified log
+                    log_func(
+                        f"Stopped Playwright instance for item {item}"
+                    )  # Simplified log
                 except Exception as e:
-                    log_func(f"Error stopping Playwright instance for item {item}: {str(e)}")
+                    log_func(
+                        f"Error stopping Playwright instance for item {item}: {str(e)}"
+                    )
         self.browser_contexts.clear()
         self.playwright_instances.clear()
         log_func("Cleared browser contexts and Playwright instances")
