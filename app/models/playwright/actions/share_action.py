@@ -25,8 +25,8 @@ class ShareAction(AutomationAction):
         """
         url = action_data.get("link", "")
         debug = action_data.get("debug", True)
-
-        # Extract URL from the link field if it contains a URL within text TODO: make field validators for this instead
+        # TODO: make field validators for this instead
+        # TODO: validation should happen in the base action level
         extracted_url = self._extract_url(url)
         if extracted_url is not None:
             url = extracted_url
@@ -42,19 +42,25 @@ class ShareAction(AutomationAction):
             )
             return False
 
-        # case 1: normal post
+        # case 1: normal post (mantain legacy code for now)
+        # eg: https://www.facebook.com/share/p/1234567890
         if "/share/p" in url:
             log_func(f"Normal post share action for account {account_id}")
-            return await self._handle_normal_post(
-                account_id, action_data, log_func, browser
-            )
+            pass
 
         # case 2: video post
+        # eg: https://www.facebook.com/share/v/1G9GWrjMZb/
         if "/share/v" in url:
             log_func(f"Video post share action for account {account_id}")
-            return await self._handle_video_post(
-                account_id, action_data, log_func, browser
-            )
+            pass
+
+        # case 3: reel post
+        # eg: https://www.facebook.com/share/r/16HzqZ3SKQ/
+        if "/share/r" in url:
+            log_func(f"Reel post share action for account {account_id}")
+            pass
+        # case 4: live / finished (ignore for now)
+        # ----
 
         browser_utils = BrowserUtils(account_id, log_func)
         user_data_dir = browser_utils.get_session_dir()
@@ -185,11 +191,11 @@ class ShareAction(AutomationAction):
             await self._log_visible_dialogs(page, log_func)
 
             # 1) Find and click the share button to open dialog
-            share_selector = (
+            SHARE_SELECTORS = (
                 'div[role="button"][aria-label="Send this to friends or post it on your profile."], '
                 'div[role="button"][aria-label="Envía esto a tus amigos o publícalo en tu perfil."]'
             )
-            log_func(f"Looking for share button with selector: {share_selector}")
+            log_func(f"Looking for share button with selector: {SHARE_SELECTORS}")
 
             # First look for the button in visible dialog if present
             share_btn = await self._find_button_in_visible_dialog(
@@ -201,7 +207,7 @@ class ShareAction(AutomationAction):
             # If not found in a dialog, try the main page
             if not share_btn:
                 log_func("Share button not found in visible dialogs, trying main page")
-                share_btn = await self._find_element(page, share_selector, log_func)
+                share_btn = await self._find_element(page, SHARE_SELECTORS, log_func)
 
             if share_btn:
                 log_func(f"Found share button for account {account_id}")
