@@ -74,15 +74,15 @@ class BrowserUtils:
     ) -> None:
         """Attempt to scroll an element by a specified distance."""
         try:
-            scroll_before = await element.evaluate(
-                "() => window.scrollY" if name == "Page" else "el => el.scrollTop"
-            )
-            await element.evaluate(
-                f"{'window' if name == 'Page' else 'el'}.scrollBy(0, {distance})"
-            )
-            scroll_after = await element.evaluate(
-                "() => window.scrollY" if name == "Page" else "el => el.scrollTop"
-            )
+            if name == "Page":
+                scroll_before = await element.evaluate("() => window.scrollY")
+                await element.evaluate(f"() => window.scrollBy(0, {distance})")
+                scroll_after = await element.evaluate("() => window.scrollY")
+            else:
+                scroll_before = await element.evaluate("el => el.scrollTop")
+                await element.evaluate(f"el => el.scrollBy(0, {distance})")
+                scroll_after = await element.evaluate("el => el.scrollTop")
+
             if debug:
                 self.log_func(f"{name} scroll: {scroll_before} -> {scroll_after}")
             if scroll_after <= scroll_before and debug:

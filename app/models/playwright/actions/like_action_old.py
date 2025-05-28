@@ -6,8 +6,7 @@ from app.utils.config import LIKE_ACTION_DELAY_RANGE
 from app.utils.randomizer import Randomizer
 
 from ..base_action import AutomationAction
-from .base_selectors import FacebookSelectors
-from .element_utils import ElementUtils
+from .browser_utils import BrowserUtils
 
 
 class ButtonSelector:
@@ -30,75 +29,57 @@ class LikeAction(AutomationAction):
         self,
         account_id: str,
         account_data: Dict[str, Any],
-        context: Any,
+        action_data: Dict[str, Any],
         log_func: Callable[[str], None],
-        randomizer: Randomizer,
+        browser: Optional[Any] = None,
     ) -> bool:
-        """Execute the like action."""
+        """Execute the like action on a Facebook post."""
+        url = action_data.get("link", "")
+        debug = action_data.get("debug", True)
+        if not url:
+            log_func(f"No URL provided for Like action on account {account_id}")
+            return False
+
+        browser_utils = BrowserUtils(account_id, log_func)
+        user_data_dir = browser_utils.get_session_dir()
+        log_func(f"Starting Like action for account {account_id}")
+
+        created_browser, playwright, browser = await browser_utils.initialize_browser(
+            browser, user_data_dir
+        )
         try:
-            self.log_func = log_func
-            self.log_func(f"Starting Like action for account {account_id}")
+            page = await browser.new_page()
+            if not await self._navigate_to_url(page, url):
+                return False
 
-            page = context
-            element_utils = ElementUtils(log_func)
-
-            # Navigate to the URL
-            post_url = account_data.get("post_url", "")
-            if post_url:
-                await page.goto(post_url, wait_until="networkidle", timeout=60000)
-                self.log_func(f"Successfully navigated to URL (account {account_id})")
+            overlay = await self._wait_for_post_overlay(page, debug)
+            if overlay:
+                await browser_utils.scroll_element(overlay, "Overlay", 100, debug)
+                like_button, button_name = await self._find_like_button(overlay, debug)
+                if not like_button:
+                    return False
             else:
-                self.log_func(f"No post URL provided (account {account_id})")
-                return False
-
-            # Add small delay to let page settle
-            await randomizer.sleep(*LIKE_ACTION_DELAY_RANGE)
-
-            # Find like button directly on the page (not in overlay)
-            like_button = await element_utils.finder.find_element_by_selector_group(
-                page, FacebookSelectors.LIKE_BUTTONS, account_id=account_id
-            )
-
-            if not like_button:
-                self.log_func(f"No like button found on page (account {account_id})")
-                return False
-
-            # Click the like button
-            click_success = await element_utils.clicker.click_element(
-                like_button, "Like button", account_id
-            )
-
-            if not click_success:
-                self.log_func(f"Failed to click like button (account {account_id})")
-                return False
-
-            # Wait for the action to complete
-            await randomizer.sleep(0.5, 1.5)
-            self.log_func(f"Like action completed successfully (account {account_id})")
-
-            # Optional verification (less strict)
-            await randomizer.sleep(0.5, 1.0)
-            unlike_button = await element_utils.finder.find_element_by_selector_group(
-                page,
-                FacebookSelectors.UNLIKE_BUTTONS,
-                account_id=account_id,
-                timeout=3000,
-            )
-
-            if unlike_button:
-                self.log_func(
-                    f"Like action verified successfully (account {account_id})"
+                log_func(
+                    f"No overlay found, scrolling main page for Like button for account {account_id}"
                 )
-            else:
-                self.log_func(
-                    f"Like action verification inconclusive (account {account_id})"
+                like_button, button_name = await self._find_like_button_on_main_page(
+                    page, debug
                 )
+                if not like_button:
+                    return False
 
-            return True
+            if not await self._click_button(like_button, button_name, debug):
+                return False
+
+            return await self._verify_and_cleanup(
+                page, like_button, created_browser, browser, debug
+            )
 
         except Exception as e:
-            self.log_func(f"Like action failed: {str(e)} (account {account_id})")
+            self._log_error(f"Error during Like action: {str(e)}")
             return False
+        finally:
+            await browser_utils.cleanup_browser(created_browser, browser, playwright)
 
     async def _navigate_to_url(self, page: Any, url: str) -> bool:
         """Navigate to the specified URL."""
