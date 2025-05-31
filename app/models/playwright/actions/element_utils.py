@@ -332,6 +332,34 @@ class ElementUtils:
         self.waiter = ElementWaiter(log_func)
         self.detector = PostTypeDetector(log_func)
 
+    async def find_visible_overlay(
+        self, page: Any, account_id: str = "", timeout: int = 5000
+    ) -> Optional[Any]:
+        """Find a visible dialog/overlay on the page, similar to what's used in ShareAction."""
+        try:
+            self.log_func(f"Looking for visible dialog/overlay (account {account_id})")
+
+            # Query all possible dialogs
+            dialogs = await page.query_selector_all(
+                FacebookSelectors.get_combined_selector(FacebookSelectors.DIALOGS)
+            )
+
+            # Find the first visible dialog
+            for dialog in dialogs:
+                if await self.finder._is_element_visible(dialog):
+                    self.log_func(
+                        f"Found visible dialog/overlay (account {account_id})"
+                    )
+                    return dialog
+
+            self.log_func(f"No visible dialogs/overlays found (account {account_id})")
+            return None
+        except Exception as e:
+            self.log_func(
+                f"Error finding visible dialog/overlay: {str(e)} (account {account_id})"
+            )
+            return None
+
     async def find_and_click_element(
         self,
         context: Any,
