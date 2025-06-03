@@ -8,6 +8,11 @@ from app.models.playwright.actions.browser_utils import BrowserUtils
 from app.models.playwright.base_action import AutomationAction
 from app.utils.randomizer import Randomizer
 
+from .dialog_utils import (
+    find_button_in_visible_dialog,
+    log_visible_dialogs,
+)
+
 
 class PostType(Enum):
     """Enumeration of supported Facebook post types."""
@@ -210,7 +215,7 @@ class NormalPostShareHandler(ShareHandler):
         """Legacy method for sharing posts as fallback."""
         try:
             # Log all dialogs to help with debugging
-            await self._log_visible_dialogs(page)
+            await log_visible_dialogs(page, self.log_func, account_id)
 
             # 1) Find and click the share button to open dialog
             SHARE_SELECTORS = (
@@ -220,9 +225,11 @@ class NormalPostShareHandler(ShareHandler):
             self.log_func(f"Looking for share button with selector: {SHARE_SELECTORS}")
 
             # First look for the button in visible dialog if present
-            share_btn = await self._find_button_in_visible_dialog(
+            share_btn = await find_button_in_visible_dialog(
                 page,
                 '[role="button"][aria-label^="Send this to friends"], [role="button"][aria-label^="Envía esto a tus amigos"]',
+                self.log_func,
+                account_id,
             )
 
             # If not found in a dialog, try the main page
@@ -253,7 +260,7 @@ class NormalPostShareHandler(ShareHandler):
                 await Randomizer.sleep(1.0, 2.5)
 
                 # Log all dialogs after clicking to see what appeared
-                await self._log_visible_dialogs(page)
+                await log_visible_dialogs(page, self.log_func, account_id)
 
                 # Define the 'Share now' selector for dialog (COMMON)
                 # TODO: this ones common and should be reused.
@@ -263,9 +270,11 @@ class NormalPostShareHandler(ShareHandler):
                 )
 
                 # Try multiple times with increasing wait times to find the Share now button
-                share_now_btn = await self._find_button_in_visible_dialog(
+                share_now_btn = await find_button_in_visible_dialog(
                     page,
                     '[role="button"][aria-label="Share now"], [role="button"][aria-label="Compartir ahora"]',
+                    self.log_func,
+                    account_id,
                 )
 
                 if not share_now_btn:
@@ -286,7 +295,7 @@ class NormalPostShareHandler(ShareHandler):
                         await Randomizer.sleep(1.0 * (attempt + 1), 1.5 * (attempt + 1))
                         # Try logging dialogs again to see any changes
                         if attempt == 2:  # Log on middle attempt
-                            await self._log_visible_dialogs(page)
+                            await log_visible_dialogs(page, self.log_func, account_id)
 
                 if share_now_btn and await self._is_element_visible(share_now_btn):
                     # Verify button is interactive
@@ -327,75 +336,6 @@ class NormalPostShareHandler(ShareHandler):
                 return False
         except Exception as e:
             self.log_func(f"Error during legacy share method: {str(e)}")
-            return False
-
-    async def _log_visible_dialogs(self, page: Any) -> None:
-        """Log information about visible dialogs on the page."""
-        try:
-            dialog_info = await page.evaluate("""
-                () => {
-                    const dialogs = Array.from(document.querySelectorAll('div[role="dialog"]'));
-                    return dialogs.map((dlg, i) => ({
-                        index: i,
-                        visible: dlg.offsetParent !== null,
-                        ariaLabelledBy: dlg.getAttribute('aria-labelledby'),
-                        ariaLabel: dlg.getAttribute('aria-label'),
-                        buttons: Array.from(dlg.querySelectorAll('[role="button"][aria-label]'))
-                            .filter(btn => btn.offsetParent !== null)
-                            .map(btn => btn.getAttribute('aria-label'))
-                    }));
-                }
-            """)
-            self.log_func(f"Found {len(dialog_info)} dialogs on page")
-            for dlg in dialog_info:
-                self.log_func(
-                    f"Dialog #{dlg['index']}: visible={dlg['visible']}, labelledBy={dlg['ariaLabelledBy']}, "
-                    + f"label={dlg['ariaLabel']}, visible buttons: {dlg['buttons']}"
-                )
-        except Exception as e:
-            self.log_func(f"Error logging dialogs: {str(e)}")
-
-    async def _find_button_in_visible_dialog(
-        self, page: Any, button_selector: str
-    ) -> Optional[Any]:
-        """Find a button within a visible dialog."""
-        try:
-            return await page.evaluate_handle(f"""
-                () => {{
-                    const dialogs = Array.from(document.querySelectorAll('div[role="dialog"][aria-labelledby]'));
-                    for (const dlg of dialogs) {{
-                        if (dlg.offsetParent === null) continue;  // ignore hidden dialogs
-                        const btn = dlg.querySelector('{button_selector}');
-                        if (btn) return btn;
-                    }}
-                    return null;
-                }}
-            """)
-        except Exception as e:
-            self.log_func(f"Error finding button in dialog: {str(e)}")
-            return None
-
-    async def _is_element_visible(self, element: Any) -> bool:
-        """Check if an element is visible on the page."""
-        try:
-            is_visible = await element.is_visible()
-            if not is_visible:
-                return False
-
-            # Additional check for actual visibility in DOM
-            is_js_visible = await element.evaluate("""
-                el => {
-                    const rect = el.getBoundingClientRect();
-                    const style = window.getComputedStyle(el);
-                    return rect.width > 0 && 
-                           rect.height > 0 && 
-                           style.display !== 'none' && 
-                           style.visibility !== 'hidden' &&
-                           el.offsetParent !== null;
-                }
-            """)
-            return is_js_visible
-        except:
             return False
 
     async def _find_element(self, page: Any, selector: str) -> Optional[Any]:
@@ -468,6 +408,29 @@ class NormalPostShareHandler(ShareHandler):
 
         self.log_func(f"All click methods failed for {element_name}")
         return False
+
+    async def _is_element_visible(self, element: Any) -> bool:
+        """Check if an element is visible on the page."""
+        try:
+            is_visible = await element.is_visible()
+            if not is_visible:
+                return False
+
+            # Additional check for actual visibility in DOM
+            is_js_visible = await element.evaluate("""
+                el => {
+                    const rect = el.getBoundingClientRect();
+                    const style = window.getComputedStyle(el);
+                    return rect.width > 0 && 
+                           rect.height > 0 && 
+                           style.display !== 'none' && 
+                           style.visibility !== 'hidden' &&
+                           el.offsetParent !== null;
+                }
+            """)
+            return is_js_visible
+        except:
+            return False
 
 
 class VideoPostShareHandler(ShareHandler):
@@ -592,76 +555,46 @@ class ReelPostShareHandler(ShareHandler):
         self.log_func(f"Reel post share action for account {account_id}")
 
         try:
-            # Direct approach without dialog validation
-            self.log_func("Attempting direct share button click for reel")
+            # Direct share button on main page for reels
+            share_button = await page.query_selector(
+                '[aria-label="Share"], [aria-label="Compartir"], '
+                '[aria-label="Send this to friends or post it on your profile."], '
+                '[aria-label="Envía esto a tus amigos o publícalo en tu perfil."]'
+            )
+            if not share_button:
+                self.log_func(
+                    f"Share button not found for reel for account {account_id}"
+                )
+                return False
 
-            # Wait for the page to stabilize
-            await Randomizer.sleep(3.0, 5.0)
+            await share_button.click()
+            # Wait for share dialog to appear
+            await Randomizer.sleep(1.0, 2.5)
 
-            # Try to find and click the share button using JavaScript
-            result = await page.evaluate("""() => {
-                return new Promise((resolve) => {
-                    // Look for the share button by aria-label
-                    const shareButtons = Array.from(document.querySelectorAll('[aria-label="Share"], [aria-label="Compartir"]'));
-                    
-                    // Filter visible buttons
-                    const visibleShareButtons = shareButtons.filter(btn => {
-                        const rect = btn.getBoundingClientRect();
-                        return rect.width > 0 && rect.height > 0 && 
-                               window.getComputedStyle(btn).display !== 'none' && 
-                               btn.offsetParent !== null;
-                    });
-                    
-                    if (visibleShareButtons.length === 0) {
-                        console.warn('❌ No visible share buttons found');
-                        resolve({success: false, error: 'No visible share buttons found'});
-                        return;
-                    }
-                    
-                    // Click the first visible share button
-                    const shareBtn = visibleShareButtons[0];
-                    console.log('Found share button:', shareBtn);
-                    
-                    // Click to open share dialog
-                    shareBtn.dispatchEvent(new MouseEvent('click', {
-                        bubbles: true,
-                        cancelable: true,
-                        view: window
-                    }));
-                    
-                    // Wait for share dialog and click "Share now"
-                    setTimeout(() => {
-                        // Look for "Share now" button in any visible dialog
-                        const shareNowBtn = document.querySelector(
-                            'div[role="button"][aria-label="Share now"], ' +
-                            'div[role="button"][aria-label="Compartir ahora"]'
-                        );
-                        
-                        if (shareNowBtn) {
-                            shareNowBtn.dispatchEvent(new MouseEvent('click', {
-                                bubbles: true,
-                                cancelable: true,
-                                view: window
-                            }));
-                            
-                            setTimeout(() => {
-                                resolve({success: true});
-                            }, 1000);
-                        } else {
-                            console.warn('❌ Share Now button not found');
-                            resolve({success: false, error: 'Share Now button not found'});
-                        }
-                    }, 1000);
-                });
-            }""")
+            # Find and click 'Share now' button in the share overlay
+            share_now_button = await page.query_selector(
+                'div[role="button"][aria-label="Share now"], div[role="button"][aria-label="Compartir ahora"]'
+            )
+            if not share_now_button:
+                self.log_func(
+                    f"'Share now' button not found for reel for account {account_id}"
+                )
+                return False
 
-            self.log_func(f"JavaScript execution result: {result}")
-
-            # Wait for the share action to complete
-            await Randomizer.sleep(3.0, 5.0)
-
-            return result.get("success", False)
-
+            await share_now_button.click()
+            self.log_func(
+                f"Clicked 'Share now' for reel, waiting for confirmation (account {account_id})"
+            )
+            # Wait for share to complete and verify
+            await Randomizer.sleep(2.0, 4.0)
+            page_text = await page.evaluate("() => document.body.innerText")
+            if "shared" in page_text.lower():
+                self.log_func(f"Share confirmed for reel for account {account_id}")
+            else:
+                self.log_func(
+                    f"Share likely completed but not confirmed for reel for account {account_id}"
+                )
+            return True
         except Exception as e:
             self.log_func(f"Error during reel share: {str(e)}")
             return False
