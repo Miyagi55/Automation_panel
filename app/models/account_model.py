@@ -1,9 +1,8 @@
-
 import json
 import os
-from pathlib import Path
 import shutil
 from typing import Any, Dict, Optional
+
 from app.utils.config import ACCOUNTS_FILE, DATA_DIR
 
 
@@ -22,7 +21,6 @@ class AccountModel:
         self.next_id = self._get_next_id()
 
     def load_accounts(self) -> Dict[str, Dict[str, Any]]:
-        
         if os.path.exists(self.accounts_file):
             try:
                 with open(self.accounts_file, "r") as f:
@@ -32,7 +30,6 @@ class AccountModel:
         return {}
 
     def save_accounts(self) -> bool:
-        
         try:
             with open(self.accounts_file, "w") as f:
                 json.dump(self.accounts, f, indent=4)
@@ -48,8 +45,9 @@ class AccountModel:
         max_id = max(int(account_id) for account_id in self.accounts.keys())
         return max_id + 1
 
-    def add_account(self, user: str, password: str) -> tuple[Optional[str], Optional[str]]:
-        
+    def add_account(
+        self, user: str, password: str
+    ) -> tuple[Optional[str], Optional[str]]:
         if not user or not password:
             return None, "Username and Password cannot be empty"
 
@@ -79,7 +77,6 @@ class AccountModel:
             return None, f"Failed to add account: {str(e)}"
 
     def update_account(self, account_id: str, user: str, password: str) -> bool:
-        
         if account_id not in self.accounts:
             return False
 
@@ -95,26 +92,29 @@ class AccountModel:
         self.save_accounts()
         return True
 
-    def delete_account(self, account_id: str) -> bool:
+    def delete_account(self, account_id: str) -> tuple[bool, Optional[str]]:
         if account_id not in self.accounts:
-            return False
-        
+            return False, None
+
         # Delete the account from the accounts dictionary
         del self.accounts[account_id]
         self.save_accounts()
-        
+
+        # Ensure the sessions directory exists
+        os.makedirs(DATA_DIR / "sessions", exist_ok=True)
+
         # Delete the session folder for the account
-        session_folder = os.path.join(DATA_DIR, 'sessions', f"session_{account_id}")
-        if os.path.exists(session_folder):
+        session_folder = DATA_DIR / "sessions" / f"session_{account_id}"
+        if session_folder.exists():
             shutil.rmtree(session_folder)
-            return True, session_folder
+            return True, str(session_folder)
+
+        return True, None
 
     def get_account(self, account_id: str) -> Optional[Dict[str, Any]]:
-        
         return self.accounts.get(account_id)
 
     def get_all_accounts(self) -> Dict[str, Dict[str, Any]]:
-        
         return self.accounts
 
     def update_account_status(
