@@ -13,7 +13,15 @@ from .dialog_utils import (
     log_visible_dialogs,
 )
 
+# NOTE:
+# codebase could benefit from having a base_selectors.py or base_action.py (example) where common logic and selectors are centralized
+# JS injection can be tricky for this, but possible.
 
+# TODO
+# the mchanism works in the following way, detect a post dialg, if present click the button inside, else, fallback to the first button found.
+
+
+# NOTE: this class could be common
 class PostType(Enum):
     """Enumeration of supported Facebook post types."""
 
@@ -32,6 +40,7 @@ class ShareRequest:
     debug: bool = True
 
 
+# NOTE: this class could be common
 class URLValidator:
     """Validates and extracts information from Facebook URLs."""
 
@@ -70,6 +79,7 @@ class URLValidator:
 
         return ShareRequest(url=extracted_url, post_type=post_type, debug=True)
 
+    # NOTE: a Pydantic field could be a decent option
     @classmethod
     def _extract_url_from_text(cls, text: str) -> Optional[str]:
         """Extract a URL from text if present."""
@@ -121,6 +131,8 @@ class NormalPostShareHandler(ShareHandler):
         self.log_func(f"Normal post share action for account {account_id}")
 
         # Use the existing proven JavaScript approach first
+        # NOTE: the post validation is only needed for the post type, if it isnt then we need to just click the element
+        # This is common and could be improved
         success = await self._execute_share_js(page)
 
         if success:
@@ -142,7 +154,7 @@ class NormalPostShareHandler(ShareHandler):
                 // This identifies the post dialog:
                 
                 return new Promise((resolve) => {
-                    // Find the visible post dialog
+                    // Find the visible post dialog (common pattern)
                     const postDialog = Array.from(document.querySelectorAll('div[role="dialog"][aria-labelledby]')).find(dlg => dlg.offsetParent !== null)
                     
                     if (!postDialog) {
